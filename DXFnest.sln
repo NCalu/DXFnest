@@ -1,0 +1,37 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.4.33205.214
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DXFnest", "DXFnest\DXFnest.csproj", "{2E3E5E09-5371-4313-A403-5B03585E3011}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ACadSharp", "ACadSharp\ACadSharp.csproj", "{FFE83C7D-B0DA-48EB-BF52-2025722DD2B9}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DeepNest", "DeepNest\DeepNest.csproj", "{FB106DCF-D411-4916-B3DF-B865C2089A53}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{2E3E5E09-5371-4313-A403-5B03585E3011}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{2E3E5E09-5371-4313-A403-5B03585E3011}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{2E3E5E09-5371-4313-A403-5B03585E3011}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{2E3E5E09-5371-4313-A403-5B03585E3011}.Release|Any CPU.Build.0 = Release|Any CPU
+		{FFE83C7D-B0DA-48EB-BF52-2025722DD2B9}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{FFE83C7D-B0DA-48EB-BF52-2025722DD2B9}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{FFE83C7D-B0DA-48EB-BF52-2025722DD2B9}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{FFE83C7D-B0DA-48EB-BF52-2025722DD2B9}.Release|Any CPU.Build.0 = Release|Any CPU
+		{FB106DCF-D411-4916-B3DF-B865C2089A53}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{FB106DCF-D411-4916-B3DF-B865C2089A53}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{FB106DCF-D411-4916-B3DF-B865C2089A53}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{FB106DCF-D411-4916-B3DF-B865C2089A53}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {49777D77-51E4-4CBE-B058-F7F0F6A6F232}
+	EndGlobalSection
+EndGlobal
