@@ -43,4 +43,4 @@ For commercial licensing, please find contact information here: [https://ncnetic
 
 ## Portable Version
 
-If you are not familiar with software development and just want to **try DXFnest**, download the [portable precompiled version](https://ncnetic.com/DXFnest.Zip).
+If you are not familiar with software development and just want to **try DXFnest**, download the [portable precompiled version](https://ncnetic.com/DXFnest.zip).
