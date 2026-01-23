@@ -28,6 +28,7 @@ This project is a refactoring of the [DeepNestPort](https://github.com/fel88/Dee
 - Use of the [ACadSharp](https://github.com/DomCR/ACadSharp) library to handle DXF files (import & export)  
 - [Clipper2](https://github.com/AngusJohnson/Clipper2) C# library used for geometric calculations  
   (already present in the original DeepNestPort, but worth mentioning)
+- Pure C# implementation
   
 ## License
 
