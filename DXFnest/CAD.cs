@@ -810,10 +810,11 @@ namespace DXFnest
             }
 
             List<Edge> simplified = new List<Edge>();
-            double aeraThreshold = gap * gap;
-            if (aeraThreshold < tol0) aeraThreshold = tol0;
-
             simplified = ResampleArcs(edges, sheet, true, aStep, maxStepL);
+
+            double aeraThreshold = Math.Pow(Math.Max(maxX - minX, maxY - minY) * 0.01, 2.0);
+            aeraThreshold = Math.Max(aeraThreshold, gap * gap);
+            if (aeraThreshold < tol0) aeraThreshold = tol0;
             if (sheet)
             {
                 simplified = SimplifyVW(simplified, aeraThreshold, SimplifyMode.Concave);
@@ -823,7 +824,7 @@ namespace DXFnest
                 //Always convex because of inner direction
                 simplified = SimplifyVW(simplified, aeraThreshold, SimplifyMode.Convex);
             }
-
+            
             if (simplified.Count < 3)
             {
                 pave = true;
