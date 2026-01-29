@@ -791,7 +791,7 @@ namespace DXFnest
 
             if (paveLimit > 0 && !inner)
             {
-                if (GetArea(edges, false) / ((maxX - minX) * (maxY - minY)) > paveLimit)
+                if (GetArea(edges, false) / ((maxX - minX) * (maxY - minY)) > paveLimit || GetArea(edges, false) < gap * gap)
                 {
                     pave = true;
 
@@ -815,13 +815,14 @@ namespace DXFnest
             double aeraThreshold = Math.Pow(Math.Max(maxX - minX, maxY - minY) * 0.01, 2.0);
             aeraThreshold = Math.Max(aeraThreshold, gap * gap);
             if (aeraThreshold < tol0) aeraThreshold = tol0;
+
+            simplified = SimplifyVW(simplified, aeraThreshold * 0.1, SimplifyMode.All);
             if (sheet)
             {
                 simplified = SimplifyVW(simplified, aeraThreshold, SimplifyMode.Concave);
             }
             else
             {
-                //Always convex because of inner direction
                 simplified = SimplifyVW(simplified, aeraThreshold, SimplifyMode.Convex);
             }
             
