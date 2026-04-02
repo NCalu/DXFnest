@@ -2,9 +2,9 @@
 
 A Windows desktop dialog for nesting DXF parts.
 
-<img src="DXFnest.png"/>
-
 DXFnest is part of the **[NCnetic](https://ncnetic.com)** software suite.
+
+<img src="DXFnest.png"/>
 
 ---
 
