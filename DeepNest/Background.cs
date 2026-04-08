@@ -707,7 +707,10 @@ namespace DeepNestLib
                 rotated.children = new List<NFP>(); ;
                 for (var j = 0; j < polygon.children.Count; j++)
                 {
-                    rotated.children.Add(rotatePolygon(polygon.children[j], degrees));
+                    if (polygon.children[j] != null)
+                    {
+                        rotated.children.Add(rotatePolygon(polygon.children[j], degrees));
+                    }
                 }
             }
 
