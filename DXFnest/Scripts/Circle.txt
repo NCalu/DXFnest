@@ -1,0 +1,36 @@
+﻿using ACadSharp;
+using ACadSharp.Entities;
+using CSMath;
+using System;
+using System.Collections.Generic;
+using System.ComponentModel;
+using System.Text;
+
+public class Shape2D
+{
+    public class ShapeParameters
+    {
+        [Category("OUTER SHAPE")]
+        public double DIAMETER { get; set; }
+
+        public ShapeParameters()
+        {
+            DIAMETER = 250.0;
+        }
+    }
+
+    public CadDocument Run(ShapeParameters parameters)
+    {
+        CadDocument doc = new CadDocument();
+
+        Circle circle = new Circle()
+        {
+            Center = new XYZ(0, 0, 0),
+            Radius = parameters.DIAMETER / 2.0,
+        };
+
+        doc.ModelSpace.Entities.Add(circle);
+
+        return doc;
+    }
+}

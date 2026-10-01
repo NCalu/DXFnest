@@ -1,0 +1,82 @@
+﻿using ACadSharp;
+using ACadSharp.Entities;
+using CSMath;
+using System;
+using System.Collections.Generic;
+using System.ComponentModel;
+using System.Drawing.Drawing2D;
+using System.Drawing;
+using System.Text;
+
+public class Shape2D
+{
+    public class ShapeParameters
+    {
+        [Category("TEXT")]
+        public string TEXT { get; set; }
+
+        [Category("TEXT")]
+        public string FONT_NAME { get; set; }
+
+        [Category("TEXT")]
+        public double CHAR_HEIGHT { get; set; }
+
+        public ShapeParameters()
+        {
+            TEXT = "HELLO";
+            FONT_NAME = "Arial";
+            CHAR_HEIGHT = 500.0;
+        }
+    }
+
+    public CadDocument Run(ShapeParameters parameters)
+    {
+        CadDocument doc = new CadDocument();
+
+        using (GraphicsPath path = new GraphicsPath())
+        {
+            FontFamily family = new FontFamily(parameters.FONT_NAME);
+
+            path.AddString(parameters.TEXT, family, (int)FontStyle.Regular, (float)parameters.CHAR_HEIGHT, 
+                new PointF(0, 0), StringFormat.GenericDefault);
+            path.Flatten();
+
+            PointF[] pts = path.PathPoints;
+            byte[] types = path.PathTypes;
+
+            LwPolyline currentPoly = null;
+
+            for (int i = 0; i < pts.Length; i++)
+            {
+                bool isStart = (types[i] & (byte)PathPointType.PathTypeMask) == (byte)PathPointType.Start;
+                bool isClosed = (types[i] & (byte)PathPointType.CloseSubpath) != 0;
+
+                if (isStart)
+                {
+                    if (currentPoly != null)
+                        doc.ModelSpace.Entities.Add(currentPoly);
+
+                    currentPoly = new LwPolyline();
+                }
+
+                currentPoly.Vertices.Add(
+                    new LwPolyline.Vertex()
+                    {
+                        Location = new XY(pts[i].X, -pts[i].Y) // flip Y for CAD coords
+                    });
+
+                if (isClosed && currentPoly != null)
+                {
+                    currentPoly.IsClosed = true;
+                    doc.ModelSpace.Entities.Add(currentPoly);
+                    currentPoly = null;
+                }
+            }
+
+            if (currentPoly != null)
+                doc.ModelSpace.Entities.Add(currentPoly);
+        }
+
+        return doc;
+    }
+}

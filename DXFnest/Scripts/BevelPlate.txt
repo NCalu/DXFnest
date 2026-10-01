@@ -1,0 +1,150 @@
+﻿using ACadSharp;
+using ACadSharp.Entities;
+using ACadSharp.Tables;
+using ACadSharp.XData;
+using CSMath;
+using System;
+using System.Collections.Generic;
+using System.ComponentModel;
+using System.Text;
+
+public class Shape2D
+{
+    public class ShapeParameters
+    {
+        public enum BevelType { I, V, Y, X, K }
+
+        [Category("OUTER SHAPE")]
+        public double WIDTH { get; set; }
+
+        [Category("OUTER SHAPE")]
+        public double BEVEL_CORNER_RADIUS { get; set; }
+
+        [Category("BEVEL")]
+        public BevelType BEVEL_TYPE { get; set; }
+
+        [Category("BEVEL")]
+        public double BEVEL_ANGLE { get; set; }
+
+        [Category("BEVEL")]
+        public double BEVEL_HEEL { get; set; }
+
+        [Category("BEVEL")]
+        public double BEVEL_ANGLE2 { get; set; }
+
+        [Category("BEVEL")]
+        public double BEVEL_POSITION_RATIO { get; set; }
+
+        public ShapeParameters()
+        {
+            WIDTH = 400.0;
+
+            BEVEL_TYPE = BevelType.Y;
+            BEVEL_ANGLE = -45.0;
+            BEVEL_HEEL = 8.0;
+            BEVEL_ANGLE2 = 0.0;
+            BEVEL_POSITION_RATIO = 0.5;
+
+        }
+    }
+
+    public CadDocument Run(ShapeParameters parameters)
+    {
+        CadDocument doc = new CadDocument();
+
+        AppId appId = new AppId("BEVEL");
+        doc.AppIds.Add(appId);
+        ExtendedData data = new ExtendedData();
+        if (parameters.BEVEL_TYPE == ShapeParameters.BevelType.V)
+        {
+            data.Records.Add(new ExtendedDataString("V"));
+            data.Records.Add(new ExtendedDataReal(parameters.BEVEL_ANGLE));
+            data.Records.Add(new ExtendedDataReal(0.0));
+            data.Records.Add(new ExtendedDataReal(0.0));
+            data.Records.Add(new ExtendedDataReal(0.0));
+        }
+        else if (parameters.BEVEL_TYPE == ShapeParameters.BevelType.Y)
+        {
+            data.Records.Add(new ExtendedDataString("Y"));
+            data.Records.Add(new ExtendedDataReal(parameters.BEVEL_ANGLE));
+            data.Records.Add(new ExtendedDataReal(parameters.BEVEL_HEEL));
+            data.Records.Add(new ExtendedDataReal(0.0));
+            data.Records.Add(new ExtendedDataReal(0.0));
+        }
+        else if (parameters.BEVEL_TYPE == ShapeParameters.BevelType.X)
+        {
+            data.Records.Add(new ExtendedDataString("X"));
+            data.Records.Add(new ExtendedDataReal(parameters.BEVEL_ANGLE));
+            data.Records.Add(new ExtendedDataReal(0.0));
+            data.Records.Add(new ExtendedDataReal(parameters.BEVEL_ANGLE2));
+            data.Records.Add(new ExtendedDataReal(parameters.BEVEL_POSITION_RATIO));
+        }
+        else if (parameters.BEVEL_TYPE == ShapeParameters.BevelType.K)
+        {
+            data.Records.Add(new ExtendedDataString("K"));
+            data.Records.Add(new ExtendedDataReal(parameters.BEVEL_ANGLE));
+            data.Records.Add(new ExtendedDataReal(parameters.BEVEL_HEEL));
+            data.Records.Add(new ExtendedDataReal(parameters.BEVEL_ANGLE2));
+            data.Records.Add(new ExtendedDataReal(parameters.BEVEL_POSITION_RATIO));
+        }
+
+        LwPolyline extBevel;
+        if (parameters.BEVEL_CORNER_RADIUS > 0)
+        {
+            extBevel = new LwPolyline
+            {
+                IsClosed = false,
+                Vertices = new List<LwPolyline.Vertex>
+                {
+                   new LwPolyline.Vertex() { Location = new XY(-parameters.WIDTH / 2.0, parameters.WIDTH / 2.0) },
+                   new LwPolyline.Vertex() { Location = new XY(parameters.WIDTH / 2.0 - parameters.BEVEL_CORNER_RADIUS, parameters.WIDTH / 2.0), Bulge = -Math.Tan(Math.PI / 8.0) },
+                   new LwPolyline.Vertex() { Location = new XY(parameters.WIDTH / 2.0, parameters.WIDTH / 2.0 - parameters.BEVEL_CORNER_RADIUS) },
+                   new LwPolyline.Vertex() { Location = new XY(parameters.WIDTH / 2.0, -parameters.WIDTH / 2.0) },
+                }
+            };
+        }
+        else if (parameters.BEVEL_CORNER_RADIUS < 0)
+        {
+            extBevel = new LwPolyline
+            {
+                IsClosed = false,
+                Vertices = new List<LwPolyline.Vertex>
+                {
+                   new LwPolyline.Vertex() { Location = new XY(-parameters.WIDTH / 2.0, parameters.WIDTH / 2.0) },
+                   new LwPolyline.Vertex() { Location = new XY(parameters.WIDTH / 2.0 + parameters.BEVEL_CORNER_RADIUS, parameters.WIDTH / 2.0), Bulge = Math.Tan(Math.PI / 8.0) },
+                   new LwPolyline.Vertex() { Location = new XY(parameters.WIDTH / 2.0, parameters.WIDTH / 2.0 + parameters.BEVEL_CORNER_RADIUS) },
+                   new LwPolyline.Vertex() { Location = new XY(parameters.WIDTH / 2.0, -parameters.WIDTH / 2.0) },
+                }
+            };
+        }
+        else
+        {
+            extBevel = new LwPolyline
+            {
+                IsClosed = false,
+                Vertices = new List<LwPolyline.Vertex>
+                {
+                   new LwPolyline.Vertex() { Location = new XY(-parameters.WIDTH / 2.0, parameters.WIDTH / 2.0) },
+                   new LwPolyline.Vertex() { Location = new XY(parameters.WIDTH / 2.0, parameters.WIDTH / 2.0) },
+                   new LwPolyline.Vertex() { Location = new XY(parameters.WIDTH / 2.0, -parameters.WIDTH / 2.0) },
+                }
+            };
+        }
+        extBevel.ExtendedData.Add(appId, data);
+        doc.ModelSpace.Entities.Add(extBevel);
+
+        LwPolyline ext0 = new LwPolyline
+        {
+            IsClosed = false,
+            Vertices = new List<LwPolyline.Vertex>
+            {
+                new LwPolyline.Vertex() { Location = new XY(parameters.WIDTH / 2.0, -parameters.WIDTH / 2.0) },
+                new LwPolyline.Vertex() { Location = new XY(-parameters.WIDTH / 2.0, -parameters.WIDTH / 2.0) },
+                new LwPolyline.Vertex() { Location = new XY(-parameters.WIDTH / 2.0, parameters.WIDTH / 2.0) },
+            }
+        };
+        doc.ModelSpace.Entities.Add(ext0);
+
+        return doc;
+    }
+}

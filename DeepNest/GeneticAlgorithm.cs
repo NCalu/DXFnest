@@ -9,7 +9,7 @@ namespace DeepNestLib
         Random Rnd = new Random();
 
         public List<PopulationItem> Population;
-        public GeneticAlgorithm(NestItem[] parts, NestConfig config)
+        public GeneticAlgorithm(Item[] parts, NestConfig config)
         {
             Population = new List<PopulationItem>
             {
@@ -24,8 +24,10 @@ namespace DeepNestLib
         {
             Population = Population.OrderBy(p => p.fitness).ToList();
 
-            List<PopulationItem> newpopulation = new List<PopulationItem>(Population.Count);
-            newpopulation.Add(Population[0]); // elitism
+            List<PopulationItem> newpopulation = new List<PopulationItem>(Population.Count)
+            {
+                Population[0] // elitism
+            };
 
             while (newpopulation.Count < Population.Count)
             {
@@ -52,7 +54,7 @@ namespace DeepNestLib
 
             Population = newpopulation;
         }
-        private PopulationItem NewPopulation(NestItem[] parts, bool first = false)
+        private PopulationItem NewPopulation(Item[] parts, bool first = false)
         {
             List<NFP> nfps = new List<NFP>();
             List<float> angles = new List<float>();
@@ -99,13 +101,17 @@ namespace DeepNestLib
                             break;
 
                         case EnabledRotations.ANY:
+                            //for (int j = 0; j < 360; j++)
+                            //{
+                            //    rotations.Add(parts[i].RotMinHeight + (float)j);
+                            //}
                             rotations = new List<float>
-                                {
-                                    parts[i].RotMinHeight,
-                                    parts[i].RotMinHeight + 90f,
-                                    parts[i].RotMinHeight + 180f,
-                                    parts[i].RotMinHeight + 270f,
-                                };
+                            {
+                                parts[i].RotMinHeight,
+                                parts[i].RotMinHeight + 90f,
+                                parts[i].RotMinHeight + 180f,
+                                parts[i].RotMinHeight + 270f,
+                            };
                             break;
                     }
 
@@ -142,32 +148,36 @@ namespace DeepNestLib
                     }
 
                     // 20% to assign alternated rotations
-                    if (Rnd.NextDouble() < 0.2)
+                    if (parts[i].Rots != EnabledRotations.NONE && 
+                        parts[i].Rots != EnabledRotations.PAVE_0_90)
                     {
-                        float angle = rotations[Rnd.Next(count)];
-                        for (int j = 0; j < quantity; j++)
+                        if (Rnd.NextDouble() < 0.2)
                         {
-                            NFP nfp = Nest.CloneTree(parts[i].Polygon);
-                            nfp.Id = id++;
-                            nfp.source = i;
-                            nfps.Add(nfp);
-                            if (j % 2 == 0)
+                            float angle = rotations[Rnd.Next(count)];
+                            for (int j = 0; j < quantity; j++)
                             {
-                                angles.Add(angle);
-                            }
-                            else
-                            {
-                                if (angle >= 180f)
+                                NFP nfp = Nest.CloneTree(parts[i].Polygon);
+                                nfp.Id = id++;
+                                nfp.source = i;
+                                nfps.Add(nfp);
+                                if (j % 2 == 0)
                                 {
-                                    angles.Add(angle - 180f);
+                                    angles.Add(angle);
                                 }
                                 else
                                 {
-                                    angles.Add(angle + 180f);
+                                    if (angle >= 180f)
+                                    {
+                                        angles.Add(angle - 180f);
+                                    }
+                                    else
+                                    {
+                                        angles.Add(angle + 180f);
+                                    }
                                 }
                             }
+                            continue;
                         }
-                        continue;
                     }
 
                     // Otherwise, distribute randomly across available rotations
@@ -224,12 +234,13 @@ namespace DeepNestLib
                 }
             }
 
-            var paired = nfps
-                .Zip(angles, (poly, ang) => new { poly, ang })
-                .OrderByDescending(x => Math.Abs(GeometryUtil.polygonArea(x.poly)))
+            // Sort by polygon area
+            List<int> indices = Enumerable.Range(0, nfps.Count)
+                .OrderByDescending(i => Math.Abs(GeometryUtil.polygonArea(nfps[i])))
                 .ToList();
-            nfps = paired.Select(x => x.poly).ToList();
-            angles = paired.Select(x => x.ang).ToList();
+
+            nfps = indices.Select(i => nfps[i]).ToList();
+            angles = indices.Select(i => angles[i]).ToList();
 
             return new PopulationItem
             {

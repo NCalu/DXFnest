@@ -1,0 +1,72 @@
+﻿using ACadSharp;
+using ACadSharp.Entities;
+using CSMath;
+using System;
+using System.Collections.Generic;
+using System.ComponentModel;
+using System.Text;
+
+public class Shape2D
+{
+    public class ShapeParameters
+    {
+        [Category("OUTER SHAPE")]
+        public double LENGTH { get; set; }
+        [Category("OUTER SHAPE")]
+        public double WIDTH { get; set; }
+        [Category("OPEN CUT")]
+        public double OFFSET { get; set; }
+
+        public ShapeParameters()
+        {
+            LENGTH = 400.0;
+            WIDTH = 400.0;
+            OFFSET = 50.0;
+        }
+    }
+
+    public CadDocument Run(ShapeParameters parameters)
+    {
+        CadDocument doc = new CadDocument();
+
+        LwPolyline rect = new LwPolyline
+        {
+            IsClosed = true,
+            Vertices = new List<LwPolyline.Vertex>
+            {
+               new LwPolyline.Vertex() { Location = new XY(-parameters.LENGTH / 2.0, -parameters.WIDTH / 2.0) },
+               new LwPolyline.Vertex() { Location = new XY(parameters.LENGTH / 2.0, -parameters.WIDTH / 2.0) },
+               new LwPolyline.Vertex() { Location = new XY(parameters.LENGTH / 2.0, parameters.WIDTH / 2.0) },
+               new LwPolyline.Vertex() { Location = new XY(-parameters.LENGTH / 2.0, parameters.WIDTH / 2.0) },
+            }
+        };
+        doc.ModelSpace.Entities.Add(rect);
+
+        Line openCut1 = new Line
+        {
+            StartPoint = new XYZ(0, parameters.WIDTH / 2.0 - parameters.OFFSET, 0),
+            EndPoint = new XYZ(0, parameters.WIDTH / 2.0, 0),
+        };
+        doc.ModelSpace.Entities.Add(openCut1);
+        Line openCut2 = new Line
+        {
+            StartPoint = new XYZ(0, -parameters.WIDTH / 2.0 + parameters.OFFSET, 0),
+            EndPoint = new XYZ(0, -parameters.WIDTH / 2.0, 0),
+        };
+        doc.ModelSpace.Entities.Add(openCut2);
+        Line openCut3 = new Line
+        {
+            StartPoint = new XYZ(parameters.LENGTH / 2.0 - parameters.OFFSET, 0, 0),
+            EndPoint = new XYZ(parameters.LENGTH / 2.0, 0, 0),
+        };
+        doc.ModelSpace.Entities.Add(openCut3);
+        Line openCut4 = new Line
+        {
+            StartPoint = new XYZ(-parameters.LENGTH / 2.0 + parameters.OFFSET, 0, 0),
+            EndPoint = new XYZ(-parameters.LENGTH / 2.0, 0, 0),
+        };
+        doc.ModelSpace.Entities.Add(openCut4);
+
+        return doc;
+    }
+}

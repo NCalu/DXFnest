@@ -345,7 +345,7 @@ namespace DeepNestLib
 
                     PolygonBounds allbounds = null;
                     PolygonBounds partbounds = null;
-                    if (config.placementType == PlacementTypeEnum.GRAVITY || config.placementType == PlacementTypeEnum.BOX)
+                    if (config.placementType == PlacementTypeEnum.gravity || config.placementType == PlacementTypeEnum.box)
                     {
                         allbounds = GeometryUtil.getPolygonBounds(allpoints);
 
@@ -377,7 +377,7 @@ namespace DeepNestLib
 
                             PolygonBounds rectbounds = null;
 
-                            if (config.placementType == PlacementTypeEnum.GRAVITY || config.placementType == PlacementTypeEnum.BOX)
+                            if (config.placementType == PlacementTypeEnum.gravity || config.placementType == PlacementTypeEnum.box)
                             {
                                 NFP poly = new NFP();
                                 poly.AddPoint(new Point(allbounds.x, allbounds.y));
@@ -393,7 +393,7 @@ namespace DeepNestLib
                                 rectbounds = GeometryUtil.getPolygonBounds(poly);
 
                                 // weigh width more, to help compress in direction of gravity
-                                if (config.placementType == PlacementTypeEnum.GRAVITY)
+                                if (config.placementType == PlacementTypeEnum.gravity)
                                 {
                                     area = rectbounds.width * 2 + rectbounds.height;
                                 }
@@ -456,7 +456,7 @@ namespace DeepNestLib
 
                 if (!minwidth.HasValue)
                 {
-                    //fitness = double.NaN;
+                    //fitness = Math.Sqrt(-1);
                 }
                 else
                 {
@@ -704,7 +704,7 @@ namespace DeepNestLib
 
             if (polygon.children != null && polygon.children.Count > 0)
             {
-                rotated.children = new List<NFP>(); ;
+                rotated.children = new List<NFP>();
                 for (var j = 0; j < polygon.children.Count; j++)
                 {
                     if (polygon.children[j] != null)

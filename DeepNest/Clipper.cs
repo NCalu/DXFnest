@@ -52,12 +52,7 @@ using System.Collections.Generic;
 namespace ClipperLib
 {
 
-#if use_int32
-    using cInt = Int32;
-#else
     using cInt = Int64;
-#endif
-
     using Path = List<IntPoint>;
     using Paths = List<List<IntPoint>>;
 
@@ -495,13 +490,8 @@ namespace ClipperLib
         internal const double tolerance = 1.0E-20;
         internal static bool near_zero(double val) { return (val > -tolerance) && (val < tolerance); }
 
-#if use_int32
-    public const cInt loRange = 0x7FFF;
-    public const cInt hiRange = 0x7FFF;
-#else
         public const cInt loRange = 0x3FFFFFFF;
         public const cInt hiRange = 0x3FFFFFFFFFFFFFFFL;
-#endif
 
         internal LocalMinima m_MinimaList;
         internal LocalMinima m_CurrentLM;

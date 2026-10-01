@@ -2,18 +2,21 @@
 using ACadSharp.IO;
 using ACadSharp;
 using DeepNestLib;
+using NCnetic.Cam;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Drawing.Design;
 using System.IO;
 using System.Linq;
+using static NCnetic.Cam.CAD;
 using ACadSharp.Tables;
 using CSMath;
-using System.Reflection;
-//using System.Windows.Forms;
+using ACadSharp.XData;
+using ACadSharp.Objects;
+using static NCnetic.Nest.NestEngine;
 
-namespace DXFnest
+namespace NCnetic.Nest
 {
     public class NestEngine
     {
@@ -22,31 +25,63 @@ namespace DXFnest
         public BindingList<SheetItem> SheetItems = new BindingList<SheetItem>();
         public BindingList<NestItem> NestItems = new BindingList<NestItem>();
         public BindingList<LayerItem> LayerItems = new BindingList<LayerItem>();
-
         public NestingContext Context;
         public double CurrentFitness;
 
-        public enum LoadType { PART, SHEET }
+        public enum LoadType { PART, SHEET, NEST }
 
-        public void UpdateDxfsLayers(List<string> files)
+        public BindingList<LayerItem> GetDxfsLayers(List<string> files)
         {
+            BindingList<LayerItem> layers = new BindingList<LayerItem>();
+
             foreach (string file in files)
             {
-                List<CAD.Feature> dxfFeatures = ReadDxfACAD(file);
-
-                foreach (CAD.Feature f in dxfFeatures)
+                using (FileStream fs = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+                using (DxfReader reader = new DxfReader(fs))
                 {
-                    if (LayerItems.ToList().Find(x => x.Name == f.Tag) == null)
+                    List<Feature> dxfFeatures = ExtractFeatures(reader.Read());
+
+                    foreach (Feature f in dxfFeatures)
                     {
-                        if (LayerItems.ToList().Find(x => x.Name == f.Tag) == null)
+                        if (layers.ToList().Find(x => x.Name == f.Tag) == null)
                         {
-                            LayerItems.Add(new LayerItem()
+                            if (LayerItems.ToList().Find(x => x.Name == f.Tag) == null)
                             {
-                                Name = f.Tag,
-                                Type = LayerItem.LayerType.CUTTING_CTR,
-                            });
+                                //int nb = 0;
+                                //int.TryParse(f.Tag, out nb);
+                                //if (nb < 0) nb = 0;
+
+                                LayerItems.Add(new LayerItem()
+                                {
+                                    Name = f.Tag,
+                                    Type = LayerItem.LayerType.CUTTING_CTR,
+                                    //ToolNb = nb,
+                                });
+                            }
+                            else
+                            {
+                                layers.Add(LayerItems.ToList().Find(x => x.Name == f.Tag));
+                            }
                         }
                     }
+                }
+            }
+
+            return layers;
+        }
+
+        public void UpdateDxfsLayers(BindingList<LayerItem> layers)
+        {
+            foreach (LayerItem layer in layers.ToList())
+            {
+                if (LayerItems.ToList().Find(x => x.Name == layer.Name) == null)
+                {
+                    LayerItems.Add(layer);
+                }
+                else
+                {
+                    int id = LayerItems.ToList().FindIndex(x => x.Name == layer.Name);
+                    LayerItems[id] = layer;
                 }
             }
         }
@@ -55,162 +90,64 @@ namespace DXFnest
         {
             foreach (string file in files)
             {
-                List<List<CAD.Feature>> added = new List<List<CAD.Feature>>();
+                List<List<Feature>> added = new List<List<Feature>>();
 
                 if (Path.GetExtension(file).ToLower() == ".dxf")
                 {
-                    List<CAD.Feature> dxfFeatures = ReadDxfACAD(file);
-
-                    foreach (CAD.Feature f in dxfFeatures)
+                    using (FileStream fs = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+                    using (DxfReader reader = new DxfReader(fs))
                     {
-                        if (LayerItems.ToList().Find(x => x.Name == f.Tag) == null)
+                        List<Feature> dxfFeatures = ExtractFeatures(reader.Read());
+
+                        foreach (Feature f in dxfFeatures)
                         {
-                            LayerItems.Add(new LayerItem()
-                            {
-                                Name = f.Tag,
-                                Type = LayerItem.LayerType.CUTTING_CTR,
-                            });
-                        }
-                    }
+                            f.Source = file;
 
-                    List<CAD.Feature> ImportFeatures = new List<CAD.Feature>();
-                    foreach (CAD.Feature f in dxfFeatures)
-                    {
-                        LayerItem layer = LayerItems.ToList().Find(x => x.Name == f.Tag);
-                        if (layer != null)
-                        {
-                            if (layer.Type == LayerItem.LayerType.CUTTING_CTR)
+                            if (LayerItems.ToList().Find(x => x.Name == f.Tag) == null)
                             {
-                                ImportFeatures.Add(f);
-                            }
-                            else if (layer.Type == LayerItem.LayerType.MARKING_CTR)
-                            {
-                                f.Type = CAD.Feature.FeatureType.DXF_IGNORE;
-                                ImportFeatures.Add(f);
-                            }
-                        }
-                    }
-
-                    added.AddRange(CAD.ExtractParts(ImportFeatures, Opts.Tol0, Opts.LinkDist, Opts.MergeLayers, Opts.MinIntArea));
-                }
-
-                if (loadtype == LoadType.SHEET)
-                {
-                    for (int i = 0; i < added.Count; i++)
-                    {
-                        float minX = float.MaxValue;
-                        float minY = float.MaxValue;
-                        float maxX = float.MinValue;
-                        float maxY = float.MinValue;
-                        foreach (CAD.Feature f in added[i])
-                        {
-                            foreach (CAD.Edge edge in f.Mesh.Edges)
-                            {
-                                minX = Math.Min(edge.V0.X, Math.Min(edge.V1.X, minX));
-                                maxX = Math.Max(edge.V0.X, Math.Max(edge.V1.X, maxX));
-
-                                minY = Math.Min(edge.V0.Y, Math.Min(edge.V1.Y, minY));
-                                maxY = Math.Max(edge.V0.Y, Math.Max(edge.V1.Y, maxY));
+                                LayerItems.Add(new LayerItem()
+                                {
+                                    Name = f.Tag,
+                                    Type = LayerItem.LayerType.CUTTING_CTR,
+                                });
                             }
                         }
 
-                        foreach (CAD.Feature f in added[i])
+                        List<Feature> ImportFeatures = new List<Feature>();
+                        foreach (Feature f in dxfFeatures)
                         {
-                            foreach (CAD.Edge edge in f.Mesh.Edges)
+                            LayerItem layer = LayerItems.ToList().Find(x => x.Name == f.Tag);
+                            if (layer != null)
                             {
-                                edge.V0.X -= minX;
-                                edge.V0.Y -= minY;
-                                edge.V1.X -= minX;
-                                edge.V1.Y -= minY;
+                                //f.ToolNb = layer.ToolNb;
+                                if (layer.Type == LayerItem.LayerType.CUTTING_CTR)
+                                {
+                                    ImportFeatures.Add(f);
+                                }
+                                else if (layer.Type == LayerItem.LayerType.MARKING_CTR)
+                                {
+                                    f.ImportType = Feature.ImportDocType.NO_CUT_ENTITY;
+                                    ImportFeatures.Add(f);
+                                }
                             }
                         }
 
-                        SheetItems.Add(new SheetItem
-                        {
-                            LX = maxX - minX,
-                            LY = maxY - minY,
-
-                            UsedQty = 0,
-                            IniQty = 1,
-
-                            Features = added[i],
-                            SourceFileName = file,
-                        });
+                        added.AddRange(ExtractParts(ImportFeatures, Opts.Tol0, Opts.LinkDist, Opts.MergeLayers, false, 
+                            Opts.ToolNbFromLayerName, Opts.DefaultCutToolNb, Opts.DefaultMrkToolNb));
                     }
                 }
-                else if (loadtype == LoadType.PART)
-                {
-                    for (int i = 0; i < added.Count; i++)
-                    {
-                        PartItems.Add(new PartItem
-                        {
-                            Name = Path.GetFileNameWithoutExtension(file) + "_" + i.ToString(),
-                            UsedQty = 0,
-                            IniQty = 1,
 
-                            Features = added[i],
-                            SourceFileName = file,
-                        });
-                    }
-                }
-            }
-
-            RestartNest();
-        }
-
-        public void LoadNesting(List<string> files)
-        {
-            foreach (string file in files)
-            {
-                List<List<CAD.Feature>> added = new List<List<CAD.Feature>>();
-
-                if (Path.GetExtension(file).ToLower() == ".dxf")
-                {
-                    List<CAD.Feature> dxfFeatures = ReadDxfACAD(file);
-
-                    foreach (CAD.Feature f in dxfFeatures)
-                    {
-                        if (LayerItems.ToList().Find(x => x.Name == f.Tag) == null)
-                        {
-                            LayerItems.Add(new LayerItem()
-                            {
-                                Name = f.Tag,
-                                Type = LayerItem.LayerType.CUTTING_CTR,
-                            });
-                        }
-                    }
-
-                    List<CAD.Feature> ImportFeatures = new List<CAD.Feature>();
-                    foreach (CAD.Feature f in dxfFeatures)
-                    {
-                        LayerItem layer = LayerItems.ToList().Find(x => x.Name == f.Tag);
-                        if (layer != null)
-                        {
-                            if (layer.Type == LayerItem.LayerType.CUTTING_CTR)
-                            {
-                                ImportFeatures.Add(f);
-                            }
-                            else if (layer.Type == LayerItem.LayerType.MARKING_CTR)
-                            {
-                                f.Type = CAD.Feature.FeatureType.DXF_IGNORE;
-                                ImportFeatures.Add(f);
-                            }
-                        }
-                    }
-
-                    added.AddRange(CAD.ExtractParts(ImportFeatures, Opts.Tol0, Opts.LinkDist, Opts.MergeLayers, Opts.MinIntArea));
-                }
-
-                float minX = float.MaxValue;
-                float minY = float.MaxValue;
-                float maxX = float.MinValue;
-                float maxY = float.MinValue;
+                List<SheetAssociation> associations = new List<SheetAssociation>();
 
                 for (int i = 0; i < added.Count; i++)
                 {
-                    foreach (CAD.Feature f in added[i])
+                    float minX = float.MaxValue;
+                    float minY = float.MaxValue;
+                    float maxX = float.MinValue;
+                    float maxY = float.MinValue;
+                    foreach (Feature f in added[i])
                     {
-                        foreach (CAD.Edge edge in f.Mesh.Edges)
+                        foreach (Edge edge in f.Edges)
                         {
                             minX = Math.Min(edge.V0.X, Math.Min(edge.V1.X, minX));
                             maxX = Math.Max(edge.V0.X, Math.Max(edge.V1.X, maxX));
@@ -219,269 +156,525 @@ namespace DXFnest
                             maxY = Math.Max(edge.V0.Y, Math.Max(edge.V1.Y, maxY));
                         }
                     }
-                }
 
-                for (int i = 0; i < added.Count; i++)
-                {
-                    foreach (CAD.Feature f in added[i])
+                    if (loadtype == LoadType.SHEET)
                     {
-                        foreach (CAD.Edge edge in f.Mesh.Edges)
+                        float dx = -minX;
+                        float dy = -minY;
+
+                        foreach (Feature f in added[i])
                         {
-                            edge.V0.X += (float)Opts.Margins - minX;
-                            edge.V0.Y += (float)Opts.Margins - minY;
-                            edge.V1.X += (float)Opts.Margins - minX;
-                            edge.V1.Y += (float)Opts.Margins - minY;
+                            foreach (Edge edge in f.Edges)
+                            {
+                                edge.V0.X += dx;
+                                edge.V0.Y += dy;
+                                edge.V1.X += dx;
+                                edge.V1.Y += dy;
+                            }
                         }
-                        foreach (CAD.Triangle tri in f.Mesh.Triangles)
+
+                        SheetItems.Add(new SheetItem
                         {
-                            tri.V0.X += (float)Opts.Margins - minX;
-                            tri.V0.Y += (float)Opts.Margins - minY;
-                            tri.V1.X += (float)Opts.Margins - minX;
-                            tri.V1.Y += (float)Opts.Margins - minY;
-                            tri.V2.X += (float)Opts.Margins - minX;
-                            tri.V2.Y += (float)Opts.Margins - minY;
+                            LX = maxX - minX,
+                            LY = maxY - minY,
+                            UsedQty = 0,
+                            IniQty = 1,
+                            Features = added[i],
+                        });
+                    }
+                    else if (loadtype == LoadType.PART || loadtype == LoadType.NEST)
+                    {
+                        if (loadtype == LoadType.NEST) 
+                        {
+                            bool merge = false;
+                            if (Opts.MultiplicityMerge)
+                            {
+                                for (int j = 0; j < PartItems.Count; j++) // (PartItem p in PartItems)
+                                {
+                                    if (PartItems[j].SheetId == SheetItems.Count && !merge)
+                                    {
+                                        Transform2d t = GetTransform(PartItems[j].Features, added[i], Opts.MultiplicityTol);
+                                        if (t != null)
+                                        {
+                                            PartItems[j].UsedQty += 1;
+                                            PartItems[j].IniQty += 1;
+
+                                            associations.Add(new SheetAssociation
+                                            {
+                                                partId = j,
+                                                T = t,
+                                            });
+
+                                            merge = true;
+                                        }
+                                    }
+                                }
+                            }
+
+                            if (!merge)
+                            {
+                                float dx = 0f;
+                                float dy = 0f;
+
+                                if (Opts.NewPartOrigin)
+                                {
+                                    dx = -minX;
+                                    dy = -minY;
+
+                                    if (Opts.Origin == Options.OriginPosition.XY_MID)
+                                    {
+                                        dx = -(maxX + minX) / 2f;
+                                        dy = -(maxY + minY) / 2f;
+                                    }
+
+                                    if (Opts.Origin == Options.OriginPosition.XY_MAX ||
+                                        Opts.Origin == Options.OriginPosition.X_MAX_Y_MIN)
+                                    {
+                                        dx = -maxX;
+                                    }
+
+                                    if (Opts.Origin == Options.OriginPosition.XY_MAX ||
+                                        Opts.Origin == Options.OriginPosition.X_MIN_Y_MAX)
+                                    {
+                                        dy = -maxY;
+                                    }
+
+                                    foreach (Feature f in added[i])
+                                    {
+                                        foreach (Edge edge in f.Edges)
+                                        {
+                                            edge.V0.X += dx;
+                                            edge.V0.Y += dy;
+                                            edge.V1.X += dx;
+                                            edge.V1.Y += dy;
+                                        }
+                                    }
+                                }
+
+                                associations.Add(new SheetAssociation
+                                {
+                                    partId = PartItems.Count,
+                                    T = new Transform2d(-dx, -dy, 0.0),
+                                });
+
+                                PartItems.Add(new PartItem
+                                {
+                                    SheetId = SheetItems.Count,
+                                    Name = Path.GetFileNameWithoutExtension(file) + "_" + i.ToString(),
+                                    UsedQty = 1,
+                                    IniQty = 1,
+                                    Features = added[i],
+                                });
+                            }
+                        }
+                        else
+                        {
+                            bool merge = false;
+                            if (Opts.MultiplicityMerge)
+                            {
+                                foreach (PartItem p in PartItems)
+                                {
+                                    if (p.SheetId == -1 && !merge)
+                                    {
+                                        Transform2d t = GetTransform(p.Features, added[i], Opts.MultiplicityTol);
+                                        if (t != null)
+                                        {
+                                            p.IniQty += 1;
+                                            merge = true;
+                                        }
+                                    }
+                                }
+                            }
+
+                            if (!merge)
+                            {
+                                float dx = 0f;
+                                float dy = 0f;
+
+                                if (Opts.NewPartOrigin)
+                                {
+                                    dx = -minX;
+                                    dy = -minY;
+
+                                    if (Opts.Origin == Options.OriginPosition.XY_MID)
+                                    {
+                                        dx = -(maxX + minX) / 2f;
+                                        dy = -(maxY + minY) / 2f;
+                                    }
+
+                                    if (Opts.Origin == Options.OriginPosition.XY_MAX ||
+                                        Opts.Origin == Options.OriginPosition.X_MAX_Y_MIN)
+                                    {
+                                        dx = -maxX;
+                                    }
+
+                                    if (Opts.Origin == Options.OriginPosition.XY_MAX ||
+                                        Opts.Origin == Options.OriginPosition.X_MIN_Y_MAX)
+                                    {
+                                        dy = -maxY;
+                                    }
+
+                                    foreach (Feature f in added[i])
+                                    {
+                                        foreach (Edge edge in f.Edges)
+                                        {
+                                            edge.V0.X += dx;
+                                            edge.V0.Y += dy;
+                                            edge.V1.X += dx;
+                                            edge.V1.Y += dy;
+                                        }
+                                    }
+                                }
+
+                                PartItems.Add(new PartItem
+                                {
+                                    SheetId = -1,
+                                    Name = Path.GetFileNameWithoutExtension(file) + "_" + i.ToString(),
+                                    UsedQty = 0,
+                                    IniQty = 1,
+                                    Features = added[i],
+                                });
+                            }
                         }
                     }
                 }
 
-                SheetItems.Add(new SheetItem
+                if (loadtype == LoadType.NEST)
                 {
-                    SourceFileName = file,
-                    Features = new List<CAD.Feature>(),
-                    Associated = added,
-                    LX = Opts.DefaultWidth,
-                    LY = Opts.DefaultHeight,
-                    IniQty = 1,
-                    UsedQty = 0,
-                }); ;
+                    SheetItems.Add(new SheetItem
+                    {
+                        Features = new List<Feature>(),
+                        Associated = associations,
+                        LX = Opts.DefaultWidth,
+                        LY = Opts.DefaultHeight,
+                        IniQty = 1,
+                        UsedQty = 0,
+                    });
+                }
+            }
 
+            RestartNest();
+        }
+        
+        public void LoadDoc(CadDocument doc)
+        {
+            List<List<Feature>> parts = ExtractParts(ExtractFeatures(doc), Opts.Tol0, Opts.LinkDist, Opts.MergeLayers, false,
+                Opts.ToolNbFromLayerName, Opts.DefaultCutToolNb, Opts.DefaultMrkToolNb);
+
+            for (int i = 0; i < parts.Count; i++)
+            {
+                if (Opts.NewPartOrigin)
+                {
+                    float minX = float.MaxValue;
+                    float minY = float.MaxValue;
+                    float maxX = float.MinValue;
+                    float maxY = float.MinValue;
+                    foreach (Feature f in parts[i])
+                    {
+                        foreach (Edge edge in f.Edges)
+                        {
+                            minX = Math.Min(edge.V0.X, Math.Min(edge.V1.X, minX));
+                            maxX = Math.Max(edge.V0.X, Math.Max(edge.V1.X, maxX));
+
+                            minY = Math.Min(edge.V0.Y, Math.Min(edge.V1.Y, minY));
+                            maxY = Math.Max(edge.V0.Y, Math.Max(edge.V1.Y, maxY));
+                        }
+
+                        float dx = -minX;
+                        float dy = -minY;
+
+                        if (Opts.Origin == Options.OriginPosition.XY_MID)
+                        {
+                            dx = -(maxX + minX) / 2f;
+                            dy = -(maxY + minY) / 2f;
+                        }
+
+                        if (Opts.Origin == Options.OriginPosition.XY_MAX ||
+                            Opts.Origin == Options.OriginPosition.X_MAX_Y_MIN)
+                        {
+                            dx = -maxX;
+                        }
+
+                        if (Opts.Origin == Options.OriginPosition.XY_MAX ||
+                            Opts.Origin == Options.OriginPosition.X_MIN_Y_MAX)
+                        {
+                            dy = -maxY;
+                        }
+
+                        foreach (Edge edge in f.Edges)
+                        {
+                            edge.V0.X += dx;
+                            edge.V0.Y += dy;
+                            edge.V1.X += dx;
+                            edge.V1.Y += dy;
+                        }
+                    }
+                }
+
+                PartItems.Add(new PartItem
+                {
+                    Name = "SCRIPT" + "_" + PartItems.Count.ToString(),
+                    UsedQty = 0,
+                    IniQty = 1,
+                    Features = parts[i],
+                });
             }
 
             RestartNest();
         }
 
-        public void ClearParts()
+        public List<Feature> ExtractFeatures(CadDocument doc)
         {
-            for (int i = 0; i < PartItems.Count; i++)
+            List<Feature> dxfData = new List<Feature>();
+
+            if (doc.Entities == null) return dxfData;
+
+            Edge edge;
+            foreach (Entity entity in doc.Entities)
             {
-                PartItems.RemoveAt(i);
-                i--;
-            }
-        }
+                string tag = entity.Layer.Name;
 
-        public List<CAD.Feature> ReadDxfACAD(string filePath)
-        {
-            List<CAD.Feature> dxfData = new List<CAD.Feature>();
-
-            using (FileStream fs = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
-            using (DxfReader reader = new DxfReader(fs))
-            {
-                CAD.Edge edge;
-
-                //try
-                //{
-                    CadDocument doc = reader.Read();
-
-                    foreach (Entity entity in doc.Entities)
+                BevelDefinition bevel = new BevelDefinition();
+                AppId appId = doc.AppIds.FirstOrDefault(a => a.Name == "BEVEL");
+                if (appId != null)
+                {
+                    if (entity.ExtendedData.TryGet(appId, out ExtendedData xdata))
                     {
-                        switch (entity.ObjectType)
+                        bevel = new BevelDefinition();
+
+                        if (xdata.Records.Count > 0)
                         {
-                            case ObjectType.POINT:
-                                ACadSharp.Entities.Point pt = (ACadSharp.Entities.Point)entity;
-                                break;
-
-                            case ObjectType.LINE:
-                                ACadSharp.Entities.Line line = (ACadSharp.Entities.Line)entity;
-
-                                edge = new CAD.Edge(line.StartPoint.X, line.StartPoint.Y, 0, line.EndPoint.X, line.EndPoint.Y, 0);
-                                dxfData.Add(new CAD.Feature(line.Layer.Name, CAD.Feature.FeatureType.DXF_OPEN_ENTITY));
-                                dxfData.Last().Mesh.Edges.Add(edge);
-                                break;
-
-                            case ObjectType.CIRCLE:
-                                ACadSharp.Entities.Circle circle = (ACadSharp.Entities.Circle)entity;
-                                dxfData.Add(new CAD.Feature(circle.Layer.Name, CAD.Feature.FeatureType.DXF_CLOSED_ENTITY));
-                                dxfData.Last().Mesh.Edges.AddRange(CAD.GetArcSegments(
-                                    circle.Center.X, circle.Center.Y, circle.Radius, 0, Math.PI, Options.angleStep, Options.maxStepL));
-                                dxfData.Last().Mesh.Edges.AddRange(CAD.GetArcSegments(
-                                    circle.Center.X, circle.Center.Y, circle.Radius, Math.PI, 2 * Math.PI, Options.angleStep, Options.maxStepL));
-                                break;
-
-                            case ObjectType.ARC:
-                                ACadSharp.Entities.Arc arc = (ACadSharp.Entities.Arc)entity;
-                                dxfData.Add(new CAD.Feature(arc.Layer.Name, CAD.Feature.FeatureType.DXF_OPEN_ENTITY));
-                                double a0 = arc.StartAngle;
-                                double a1 = arc.EndAngle;
-                                if (a0 > a1)
-                                {
-                                    a0 -= 2.0 * Math.PI;
-                                }
-                                dxfData.Last().Mesh.Edges.AddRange(CAD.GetArcSegments(
-                                    arc.Center.X, arc.Center.Y, arc.Radius, a0, a1, Options.angleStep, Options.maxStepL));
-                                break;
-
-                            case ObjectType.ELLIPSE:
-                                ACadSharp.Entities.Ellipse ellipse = (ACadSharp.Entities.Ellipse)entity;
-                                break;
-
-                            case ObjectType.LWPOLYLINE:
-                                ACadSharp.Entities.LwPolyline lwpoly = (ACadSharp.Entities.LwPolyline)entity;
-                                if (lwpoly.Vertices.Count <= 1)
-                                {
-                                    break;
-                                }
-
-                                List<CAD.Edge> lwpoly_crt = new List<CAD.Edge>();
-                                for (int i = 1; i < lwpoly.Vertices.Count; i++)
-                                {
-                                    double bulge = lwpoly.Vertices[i - 1].Bulge;
-                                    if (Math.Abs(bulge) < Opts.Tol0)
-                                    {
-                                        edge = new CAD.Edge(
-                                            lwpoly.Vertices[i - 1].Location.X,
-                                            lwpoly.Vertices[i - 1].Location.Y,
-                                            0,
-                                            lwpoly.Vertices[i].Location.X,
-                                            lwpoly.Vertices[i].Location.Y,
-                                            0);
-                                        lwpoly_crt.Add(edge);
-                                    }
-                                    else
-                                    {
-                                        lwpoly_crt.AddRange(CAD.GetBulgeSegmented(bulge,
-                                            lwpoly.Vertices[i - 1].Location.X, lwpoly.Vertices[i - 1].Location.Y,
-                                            lwpoly.Vertices[i].Location.X, lwpoly.Vertices[i].Location.Y, Options.angleStep, Options.maxStepL));
-                                    }
-                                }
-
-                                double end_bulge_lwpoly = lwpoly.Vertices[lwpoly.Vertices.Count - 1].Bulge;
-                                edge = new CAD.Edge(
-                                        lwpoly_crt.Last().V1.X,
-                                        lwpoly_crt.Last().V1.Y,
-                                        0,
-                                        lwpoly.Vertices[0].Location.X,
-                                        lwpoly.Vertices[0].Location.Y,
-                                        0);
-                                if (Math.Sqrt(Math.Pow(edge.V0.X - edge.V1.X, 2) + Math.Pow(edge.V0.Y - edge.V1.Y, 2)) > Opts.Tol0)
-                                {
-                                    if (lwpoly.IsClosed)
-                                    {
-                                        if (Math.Abs(end_bulge_lwpoly) < Opts.Tol0)
-                                        {
-                                            lwpoly_crt.Add(edge);
-                                        }
-                                        else
-                                        {
-                                            lwpoly_crt.AddRange(CAD.GetBulgeSegmented(end_bulge_lwpoly,
-                                                edge.V0.X, edge.V0.Y, edge.V1.X, edge.V1.Y, Options.angleStep, Options.maxStepL));
-                                        }
-
-                                        dxfData.Add(new CAD.Feature(lwpoly.Layer.Name, CAD.Feature.FeatureType.DXF_CLOSED_ENTITY));
-                                        dxfData.Last().Mesh.Edges.AddRange(lwpoly_crt);
-                                    }
-                                    else
-                                    {
-                                        dxfData.Add(new CAD.Feature(lwpoly.Layer.Name, CAD.Feature.FeatureType.DXF_OPEN_ENTITY));
-                                        dxfData.Last().Mesh.Edges.AddRange(lwpoly_crt);
-                                    }
-                                }
-                                else
-                                {
-                                    dxfData.Add(new CAD.Feature(lwpoly.Layer.Name, CAD.Feature.FeatureType.DXF_CLOSED_ENTITY));
-                                    dxfData.Last().Mesh.Edges.AddRange(lwpoly_crt);
-                                }
-                                break;
-
-                            case ObjectType.POLYLINE_2D:
-                                ACadSharp.Entities.Polyline2D poly2 = (ACadSharp.Entities.Polyline2D)entity;
-                                if (poly2.Vertices.Count <= 1)
-                                {
-                                    break;
-                                }
-
-                                List<CAD.Edge> poly2_crt = new List<CAD.Edge>();
-                                for (int i = 1; i < poly2.Vertices.Count; i++)
-                                {
-                                    double bulge = poly2.Vertices[i - 1].Bulge;
-                                    if (Math.Abs(bulge) < Opts.Tol0)
-                                    {
-                                        edge = new CAD.Edge(
-                                            poly2.Vertices[i - 1].Location.X,
-                                            poly2.Vertices[i - 1].Location.Y,
-                                            0,
-                                            poly2.Vertices[i].Location.X,
-                                            poly2.Vertices[i].Location.Y,
-                                            0);
-                                        poly2_crt.Add(edge);
-                                    }
-                                    else
-                                    {
-                                        poly2_crt.AddRange(CAD.GetBulgeSegmented(bulge,
-                                            poly2.Vertices[i - 1].Location.X, poly2.Vertices[i - 1].Location.Y,
-                                            poly2.Vertices[i].Location.X, poly2.Vertices[i].Location.Y, Options.angleStep, Options.maxStepL));
-                                    }
-                                }
-
-                                double end_bulge_poly2 = poly2.Vertices[poly2.Vertices.Count - 1].Bulge;
-                                edge = new CAD.Edge(
-                                    poly2_crt.Last().V1.X,
-                                    poly2_crt.Last().V1.Y,
-                                    0,
-                                    poly2.Vertices[0].Location.X,
-                                    poly2.Vertices[0].Location.Y,
-                                    0);
-
-                                if (Math.Sqrt(Math.Pow(edge.V0.X - edge.V1.X, 2) + Math.Pow(edge.V0.Y - edge.V1.Y, 2)) > Opts.Tol0)
-                                {
-                                    if (poly2.IsClosed)
-                                    {
-                                        if (Math.Abs(end_bulge_poly2) < Opts.Tol0)
-                                        {
-                                            poly2_crt.Add(edge);
-                                        }
-                                        else
-                                        {
-                                            poly2_crt.AddRange(CAD.GetBulgeSegmented(end_bulge_poly2,
-                                                edge.V0.X, edge.V0.Y, edge.V1.X, edge.V1.Y, Options.angleStep, Options.maxStepL));
-                                        }
-
-                                        dxfData.Add(new CAD.Feature(poly2.Layer.Name, CAD.Feature.FeatureType.DXF_CLOSED_ENTITY));
-                                        dxfData.Last().Mesh.Edges.AddRange(poly2_crt);
-                                    }
-                                    else
-                                    {
-                                        dxfData.Add(new CAD.Feature(poly2.Layer.Name, CAD.Feature.FeatureType.DXF_OPEN_ENTITY));
-                                        dxfData.Last().Mesh.Edges.AddRange(poly2_crt);
-                                    }
-                                }
-                                else
-                                {
-                                    dxfData.Add(new CAD.Feature(poly2.Layer.Name, CAD.Feature.FeatureType.DXF_CLOSED_ENTITY));
-                                    dxfData.Last().Mesh.Edges.AddRange(poly2_crt);
-                                }
-                                break;
-
-                            case ObjectType.SPLINE:
-                                ACadSharp.Entities.Spline spline = (ACadSharp.Entities.Spline)entity;
-                                // TODO => BI-ARCS TO IMPORT INKSCAPE SPLINES (NO FLATTEN BEZIERS) 
-                                break;
-
-                            case ObjectType.POLYLINE_3D:
-                                ACadSharp.Entities.Polyline3D poly3 = (ACadSharp.Entities.Polyline3D)entity;
-                                break;
-
-                            case ObjectType.TEXT:
-                                    break;
-
-                            case ObjectType.MTEXT:
-                                break;
-
-                            default:
-                                break;
+                            ExtendedDataString rec0 = xdata.Records[0] as ExtendedDataString;
+                            if (rec0 != null) bevel.Type = (BevelType)Enum.Parse(typeof(BevelType), (string)rec0.Value);
+                        }
+                        if (xdata.Records.Count > 1)
+                        {
+                            ExtendedDataReal rec1 = xdata.Records[1] as ExtendedDataReal;
+                            if (rec1 != null) bevel.A = (double)rec1.Value;
+                        }
+                        if (xdata.Records.Count > 2)
+                        {
+                            ExtendedDataReal rec2 = xdata.Records[2] as ExtendedDataReal;
+                            if (rec2 != null) bevel.Hr = (double)rec2.Value;
+                        }
+                        if (xdata.Records.Count > 3)
+                        {
+                            ExtendedDataReal rec3 = xdata.Records[3] as ExtendedDataReal;
+                            if (rec3 != null) bevel.B = (double)rec3.Value;
+                        }
+                        if (xdata.Records.Count > 4)
+                        {
+                            ExtendedDataReal rec4 = xdata.Records[4] as ExtendedDataReal;
+                            if (rec4 != null) bevel.r = (double)rec4.Value;
                         }
                     }
+                }
+
+                //int tool = 0;
+                //if (LayerItems.ToList().Find(x => x.Name == tag) != null)
+                //{
+                //    tool = LayerItems.ToList().Find(x => x.Name == tag).ToolNb;
                 //}
-                //catch { return dxfData; }
+
+                switch (entity.ObjectType)
+                {
+                    case ObjectType.POINT:
+                        ACadSharp.Entities.Point pt = (ACadSharp.Entities.Point)entity;
+                        break;
+
+                    case ObjectType.LINE:
+                        ACadSharp.Entities.Line line = (ACadSharp.Entities.Line)entity;
+
+                        edge = new CAD.Edge(line.StartPoint.X, line.StartPoint.Y, line.EndPoint.X, line.EndPoint.Y);
+                        edge.Bevel = bevel;
+                        dxfData.Add(new CAD.Feature(tag, CAD.Feature.ImportDocType.OPEN_ENTITY));
+                        dxfData.Last().Edges.Add(edge);
+                        break;
+
+                    case ObjectType.CIRCLE:
+                        ACadSharp.Entities.Circle circle = (ACadSharp.Entities.Circle)entity;
+                        dxfData.Add(new CAD.Feature(tag, CAD.Feature.ImportDocType.CLOSED_ENTITY));
+                        //dxfData.Last().Edges.AddRange(CAD.GetArcSegments(
+                        //    circle.Center.X, circle.Center.Y, circle.Radius, 0, Math.PI / 2.0, Options.angleStep, Options.maxStepL));
+                        //dxfData.Last().Edges.AddRange(CAD.GetArcSegments(
+                        //    circle.Center.X, circle.Center.Y, circle.Radius, Math.PI / 2.0, Math.PI, Options.angleStep, Options.maxStepL));
+                        //dxfData.Last().Edges.AddRange(CAD.GetArcSegments(
+                        //    circle.Center.X, circle.Center.Y, circle.Radius, Math.PI, 3.0 * Math.PI / 2.0, Options.angleStep, Options.maxStepL));
+                        //dxfData.Last().Edges.AddRange(CAD.GetArcSegments(
+                        //    circle.Center.X, circle.Center.Y, circle.Radius, 3.0 * Math.PI / 2.0, 2 * Math.PI, Options.angleStep, Options.maxStepL));
+
+                        dxfData.Last().Edges.AddRange(CAD.GetArcSegments(
+                            circle.Center.X, circle.Center.Y, circle.Radius, 0, 2.0 * Math.PI, Options.angleStep, Options.maxStepL));
+                        foreach (Edge e in dxfData.Last().Edges) e.Bevel = bevel;
+                        break;
+
+                    case ObjectType.ARC:
+                        ACadSharp.Entities.Arc arc = (ACadSharp.Entities.Arc)entity;
+                        dxfData.Add(new CAD.Feature(tag, CAD.Feature.ImportDocType.OPEN_ENTITY));
+                        double a0 = arc.StartAngle;
+                        double a1 = arc.EndAngle;
+                        if (a0 > a1)
+                        {
+                            a0 -= 2.0 * Math.PI;
+                        }
+                        dxfData.Last().Edges.AddRange(CAD.GetArcSegments(
+                            arc.Center.X, arc.Center.Y, arc.Radius, a0, a1, Options.angleStep, Options.maxStepL));
+                        foreach (Edge e in dxfData.Last().Edges) e.Bevel = bevel;
+                        break;
+
+                    case ObjectType.ELLIPSE:
+                        ACadSharp.Entities.Ellipse ellipse = (ACadSharp.Entities.Ellipse)entity;
+                        break;
+
+                    case ObjectType.LWPOLYLINE:
+                        ACadSharp.Entities.LwPolyline lwpoly = (ACadSharp.Entities.LwPolyline)entity;
+                        if (lwpoly.Vertices.Count <= 1)
+                        {
+                            break;
+                        }
+
+                        List<CAD.Edge> lwpoly_crt = new List<CAD.Edge>();
+                        for (int i = 1; i < lwpoly.Vertices.Count; i++)
+                        {
+                            double bulge = lwpoly.Vertices[i - 1].Bulge;
+                            if (Math.Abs(bulge) < Opts.Tol0)
+                            {
+                                edge = new CAD.Edge(
+                                    lwpoly.Vertices[i - 1].Location.X,
+                                    lwpoly.Vertices[i - 1].Location.Y,
+                                    lwpoly.Vertices[i].Location.X,
+                                    lwpoly.Vertices[i].Location.Y);
+                                lwpoly_crt.Add(edge);
+                            }
+                            else
+                            {
+                                lwpoly_crt.AddRange(CAD.GetBulgeSegments(bulge,
+                                    lwpoly.Vertices[i - 1].Location.X, lwpoly.Vertices[i - 1].Location.Y,
+                                    lwpoly.Vertices[i].Location.X, lwpoly.Vertices[i].Location.Y, Options.angleStep, Options.maxStepL));
+                            }
+                        }
+
+                        double end_bulge_lwpoly = lwpoly.Vertices[lwpoly.Vertices.Count - 1].Bulge;
+                        edge = new CAD.Edge(
+                                lwpoly_crt.Last().V1.X,
+                                lwpoly_crt.Last().V1.Y,
+                                lwpoly.Vertices[0].Location.X,
+                                lwpoly.Vertices[0].Location.Y);
+                        if (Math.Sqrt(Math.Pow(edge.V0.X - edge.V1.X, 2) + Math.Pow(edge.V0.Y - edge.V1.Y, 2)) > Opts.Tol0)
+                        {
+                            if (lwpoly.IsClosed)
+                            {
+                                if (Math.Abs(end_bulge_lwpoly) < Opts.Tol0)
+                                {
+                                    lwpoly_crt.Add(edge);
+                                }
+                                else
+                                {
+                                    lwpoly_crt.AddRange(CAD.GetBulgeSegments(end_bulge_lwpoly,
+                                        edge.V0.X, edge.V0.Y, edge.V1.X, edge.V1.Y, Options.angleStep, Options.maxStepL));
+                                }
+
+                                dxfData.Add(new CAD.Feature(tag, CAD.Feature.ImportDocType.CLOSED_ENTITY));
+                                dxfData.Last().Edges.AddRange(lwpoly_crt);
+                            }
+                            else
+                            {
+                                dxfData.Add(new CAD.Feature(tag, CAD.Feature.ImportDocType.OPEN_ENTITY));
+                                dxfData.Last().Edges.AddRange(lwpoly_crt);
+                            }
+                        }
+                        else
+                        {
+                            dxfData.Add(new CAD.Feature(tag, CAD.Feature.ImportDocType.CLOSED_ENTITY));
+                            dxfData.Last().Edges.AddRange(lwpoly_crt);
+                        }
+                        foreach (Edge e in dxfData.Last().Edges) e.Bevel = bevel;
+                        break;
+
+                    case ObjectType.POLYLINE_2D:
+                        ACadSharp.Entities.Polyline2D poly2 = (ACadSharp.Entities.Polyline2D)entity;
+                        if (poly2.Vertices.Count <= 1)
+                        {
+                            break;
+                        }
+
+                        List<CAD.Edge> poly2_crt = new List<CAD.Edge>();
+                        for (int i = 1; i < poly2.Vertices.Count; i++)
+                        {
+                            double bulge = poly2.Vertices[i - 1].Bulge;
+                            if (Math.Abs(bulge) < Opts.Tol0)
+                            {
+                                edge = new CAD.Edge(
+                                    poly2.Vertices[i - 1].Location.X,
+                                    poly2.Vertices[i - 1].Location.Y,
+                                    poly2.Vertices[i].Location.X,
+                                    poly2.Vertices[i].Location.Y);
+                                poly2_crt.Add(edge);
+                            }
+                            else
+                            {
+                                poly2_crt.AddRange(CAD.GetBulgeSegments(bulge,
+                                    poly2.Vertices[i - 1].Location.X, poly2.Vertices[i - 1].Location.Y,
+                                    poly2.Vertices[i].Location.X, poly2.Vertices[i].Location.Y, Options.angleStep, Options.maxStepL));
+                            }
+                        }
+
+                        double end_bulge_poly2 = poly2.Vertices[poly2.Vertices.Count - 1].Bulge;
+                        edge = new CAD.Edge(
+                            poly2_crt.Last().V1.X,
+                            poly2_crt.Last().V1.Y,
+                            poly2.Vertices[0].Location.X,
+                            poly2.Vertices[0].Location.Y);
+
+                        if (Math.Sqrt(Math.Pow(edge.V0.X - edge.V1.X, 2) + Math.Pow(edge.V0.Y - edge.V1.Y, 2)) > Opts.Tol0)
+                        {
+                            if (poly2.IsClosed)
+                            {
+                                if (Math.Abs(end_bulge_poly2) < Opts.Tol0)
+                                {
+                                    poly2_crt.Add(edge);
+                                }
+                                else
+                                {
+                                    poly2_crt.AddRange(CAD.GetBulgeSegments(end_bulge_poly2,
+                                        edge.V0.X, edge.V0.Y, edge.V1.X, edge.V1.Y, Options.angleStep, Options.maxStepL));
+                                }
+
+                                dxfData.Add(new CAD.Feature(tag, CAD.Feature.ImportDocType.CLOSED_ENTITY));
+                                dxfData.Last().Edges.AddRange(poly2_crt);
+                            }
+                            else
+                            {
+                                dxfData.Add(new CAD.Feature(tag, CAD.Feature.ImportDocType.OPEN_ENTITY));
+                                dxfData.Last().Edges.AddRange(poly2_crt);
+                            }
+                        }
+                        else
+                        {
+                            dxfData.Add(new CAD.Feature(tag, CAD.Feature.ImportDocType.CLOSED_ENTITY));
+                            dxfData.Last().Edges.AddRange(poly2_crt);
+                        }
+                        foreach (Edge e in dxfData.Last().Edges) e.Bevel = bevel;
+                        break;
+
+                    case ObjectType.SPLINE:
+                        ACadSharp.Entities.Spline spline = (ACadSharp.Entities.Spline)entity;
+                        // TODO => BI-ARCS TO IMPORT INKSCAPE SPLINES (NO FLATTEN BEZIERS) 
+                        break;
+
+                    case ObjectType.POLYLINE_3D:
+                        ACadSharp.Entities.Polyline3D poly3 = (ACadSharp.Entities.Polyline3D)entity;
+                        break;
+
+                    case ObjectType.TEXT:
+                        break;
+
+                    case ObjectType.MTEXT:
+                        break;
+
+                    default:
+                        break;
+                }
             }
 
             return dxfData;
@@ -491,11 +684,14 @@ namespace DXFnest
         {
             CurrentFitness = double.MaxValue;
 
-            DeepNestLib.Nest.Config.placementType = Opts.PlacementType;
+            DeepNestLib.Nest.Config.placementType = PlacementTypeEnum.gravity;
             DeepNestLib.Nest.Config.spacing = Opts.Spacing;
             DeepNestLib.Nest.Config.sheetSpacing = Opts.Margins;
-            DeepNestLib.Nest.Config.populationSize = Opts.PopulationSize;
-            DeepNestLib.Nest.Config.MutationRate = Opts.MutationRate * 0.01;
+            //DeepNestLib.Nest.Config.populationSize = Opts.PopulationSize;
+            //DeepNestLib.Nest.Config.MutationRate = Opts.MutationRate * 0.01;
+
+            DeepNestLib.Nest.Config.populationSize = Options.PopulationSize;
+            DeepNestLib.Nest.Config.MutationRate = Options.MutationRate * 0.01;
 
             Context = new NestingContext();
 
@@ -506,30 +702,30 @@ namespace DXFnest
                 if (SheetItems[i].Features.Any())
                 {
                     extDefined = false;
-                    List<CAD.Feature> dxfSheet = SheetItems[i].Features;
+                    List<Feature> dxfSheet = SheetItems[i].Features;
 
-                    foreach (CAD.Feature f in dxfSheet)
+                    foreach (Feature f in dxfSheet)
                     {
-                        List<CAD.Edge> simplified;
-                        if (f.Type == CAD.Feature.FeatureType.EXT)
+                        List<Edge> simplified;
+                        if (f.Type == Feature.FeatureType.EXT)
                         {
                             extDefined = true;
-                            simplified = CAD.SimplifyForNest(f.Mesh.Edges, true, true, Opts.Spacing, -1,
+                            simplified = SimplifyForNest(f.Edges, true, true, Opts.Spacing, -1,
                                 Math.PI / 4.0, Opts.NestArcSegmentsMaxLength, out double dbl, out bool inpave);
-                            foreach (CAD.Edge edge in simplified)
+                            foreach (Edge edge in simplified)
                             {
                                 nfpSheet.AddPoint(new DeepNestLib.Point(edge.V1.X, edge.V1.Y));
                             }
                         }
-                        if (f.Type == CAD.Feature.FeatureType.INT)
+                        if (f.Type == Feature.FeatureType.INT)
                         {
-                            simplified = CAD.SimplifyForNest(f.Mesh.Edges, false, true, Opts.Spacing, -1,
+                            simplified = SimplifyForNest(f.Edges, false, true, Opts.Spacing, -1,
                                 Math.PI / 4.0, Opts.NestArcSegmentsMaxLength, out double dbl, out bool inpave);
                             if (simplified != null)
                             {
                                 if (nfpSheet.children == null) nfpSheet.children = new List<NFP>();
                                 NFP nfpHole = new NFP();
-                                foreach (CAD.Edge edge in simplified)
+                                foreach (Edge edge in simplified)
                                 {
                                     nfpHole.AddPoint(new DeepNestLib.Point(edge.V1.X, edge.V1.Y));
                                 }
@@ -546,23 +742,46 @@ namespace DXFnest
                     nfpSheet.AddPoint(new DeepNestLib.Point(0, SheetItems[i].LY));
                 }
 
-                foreach (List<CAD.Feature> part in SheetItems[i].Associated)
+                foreach (SheetAssociation sa in SheetItems[i].Associated)
                 {
-                    foreach (CAD.Feature f in part)
+                    NFP nfpAssociated = new NFP();
+                    bool associatedExtDefined = false;
+                    bool associatedExtpave = false;
+
+                    foreach (Feature f in RotoTranslatePartXY(PartItems[sa.partId].Features, sa.T.X, sa.T.Y, sa.T.Rot))
                     {
-                        if (f.Type == CAD.Feature.FeatureType.EXT)
+                        List<Edge> simplified;
+                        if (f.Type == Feature.FeatureType.EXT)
                         {
+                            associatedExtDefined = true;
                             if (nfpSheet.children == null) nfpSheet.children = new List<NFP>();
-                            List<CAD.Edge> simplified;
-                            simplified = CAD.SimplifyForNest(f.Mesh.Edges, false, false, Opts.Spacing, Opts.PaveLimit * 0.01,
-                                Math.PI / 4.0, Opts.NestArcSegmentsMaxLength, out double dbl, out bool inpave);
-                            NFP nfpAssociated = new NFP();
-                            foreach (CAD.Edge edge in simplified)
+                            simplified = SimplifyForNest(f.Edges, false, false, Opts.Spacing, Opts.PaveLimit * 0.01,
+                                Math.PI / 4.0, Opts.NestArcSegmentsMaxLength, out double dbl, out associatedExtpave);
+                            foreach (Edge edge in simplified)
                             {
                                 nfpAssociated.AddPoint(new DeepNestLib.Point(edge.V1.X, edge.V1.Y));
                             }
-                            nfpSheet.children.Add(nfpAssociated);
                         }
+                        if (f.Type == Feature.FeatureType.INT && GetArea(f.Edges) > Math.Max(Opts.Spacing * Opts.Spacing, Opts.MinIntArea))
+                        {
+                            simplified = SimplifyForNest(f.Edges, false, true, Opts.Spacing, -1,
+                                Math.PI / 4.0, Opts.NestArcSegmentsMaxLength, out double dbl, out bool inpave);
+                            if (simplified != null)
+                            {
+                                if (nfpAssociated.children == null) nfpAssociated.children = new List<NFP>();
+                                NFP nfpHole = new NFP();
+                                foreach (Edge edge in simplified)
+                                {
+                                    nfpHole.AddPoint(new DeepNestLib.Point(edge.V1.X, edge.V1.Y));
+                                }
+                                nfpAssociated.children.Add(nfpHole);
+                            }
+                        }
+                    }
+
+                    if (associatedExtDefined)
+                    {
+                        nfpSheet.children.Add(nfpAssociated);
                     }
                 }
 
@@ -579,30 +798,30 @@ namespace DXFnest
                 bool extpave = false;
                 double extMinHrot = 0.0;
 
-                List<CAD.Feature> dxfPart = PartItems[i].Features;
+                List<Feature> dxfPart = PartItems[i].Features;
 
-                foreach (CAD.Feature f in dxfPart)
+                foreach (Feature f in dxfPart)
                 {
-                    List<CAD.Edge> simplified;
-                    if (f.Type == CAD.Feature.FeatureType.EXT)
+                    List<Edge> simplified;
+                    if (f.Type == Feature.FeatureType.EXT)
                     {
                         extDefined = true;
-                        simplified = CAD.SimplifyForNest(f.Mesh.Edges, false, false, Opts.Spacing, Opts.PaveLimit * 0.01,
+                        simplified = SimplifyForNest(f.Edges, false, false, Opts.Spacing, Opts.PaveLimit * 0.01,
                             Math.PI / 4.0, Opts.NestArcSegmentsMaxLength, out extMinHrot, out extpave);
-                        foreach (CAD.Edge edge in simplified)
+                        foreach (Edge edge in simplified)
                         {
                             nfpPart.AddPoint(new DeepNestLib.Point(edge.V1.X, edge.V1.Y));
                         }
                     }
-                    if (f.Type == CAD.Feature.FeatureType.INT && CAD.GetArea(f.Mesh.Edges) > Math.Max(Opts.Spacing * Opts.Spacing, Opts.MinIntArea))
+                    if (f.Type == Feature.FeatureType.INT && GetArea(f.Edges) > Math.Max(Opts.Spacing * Opts.Spacing, Opts.MinIntArea))
                     {
-                        simplified = CAD.SimplifyForNest(f.Mesh.Edges, false, true, Opts.Spacing, -1,
+                        simplified = SimplifyForNest(f.Edges, false, true, Opts.Spacing, -1,
                             Math.PI / 4.0, Opts.NestArcSegmentsMaxLength, out double dbl, out bool inpave);
                         if (simplified != null)
                         {
                             if (nfpPart.children == null) nfpPart.children = new List<NFP>();
                             NFP nfpHole = new NFP();
-                            foreach (CAD.Edge edge in simplified)
+                            foreach (Edge edge in simplified)
                             {
                                 nfpHole.AddPoint(new DeepNestLib.Point(edge.V1.X, edge.V1.Y));
                             }
@@ -616,33 +835,47 @@ namespace DXFnest
                     extMinHrot = extMinHrot * 180.0 / Math.PI;
                     EnabledRotations rots = EnabledRotations.NONE;
 
-                    if (extpave)
+                    switch (Opts.PartRotations)
                     {
-                        rots = EnabledRotations.PAVE_0_90;
+                        case Options.Rotations.NONE:
+                            rots = EnabledRotations.NONE;
+                            break;
+
+                        case Options.Rotations.BY_180:
+                            if (extpave)
+                            {
+                                rots = EnabledRotations.NONE;
+                            }
+                            else
+                            {
+                                rots = EnabledRotations.BY_180;
+                            }
+                            break;
+
+                        case Options.Rotations.BY_90:
+                            rots = EnabledRotations.BY_90;
+                            break;
+
+                        case Options.Rotations.ANY:
+                            if (extpave)
+                            {
+                                rots = EnabledRotations.PAVE_0_90;
+                            }
+                            else
+                            {
+                                rots = EnabledRotations.ANY;
+                            }
+                            break;
+                    }
+
+                    if (PartItems[i].SheetId == -1)
+                    {
+                        Context.AddPart(nfpPart, PartItems[i].IniQty, rots, extMinHrot);
                     }
                     else
                     {
-                        switch (Opts.PartRotations)
-                        {
-                            case Options.Rotations.NONE:
-                                rots = EnabledRotations.NONE;
-                                break;
-
-                            case Options.Rotations.BY_180:
-                                rots = EnabledRotations.BY_180;
-                                break;
-
-                            case Options.Rotations.BY_90:
-                                rots = EnabledRotations.BY_90;
-                                break;
-
-                            case Options.Rotations.ANY:
-                                rots = EnabledRotations.ANY;
-                                break;
-                        }
+                        Context.AddPart(nfpPart, 0, rots, extMinHrot);
                     }
-
-                    Context.AddPart(nfpPart, PartItems[i].IniQty, rots, extMinHrot);
                 }
             }
 
@@ -661,7 +894,14 @@ namespace DXFnest
 
             foreach (PartItem item in PartItems)
             {
-                item.UsedQty = 0;
+                if (item.SheetId == -1)
+                {
+                    item.UsedQty = 0;
+                }
+                else
+                {
+                    item.IniQty = item.UsedQty;
+                }
             }
             foreach (SheetItem item in SheetItems)
             {
@@ -677,70 +917,39 @@ namespace DXFnest
                     {
                         SheetSource = nest.sheetSource,
                         Name = "NEST_" + NestItems.Count,
-                        NestData = new List<List<CAD.Feature>>(),
+                        NestData = new List<List<Feature>>(),
                     });
                     SheetItems[nest.sheetSource].UsedQty++;
 
                     foreach (PlacementItem pos in nest.sheetplacements)
                     {
                         NestItems.Last().NestData.Add(
-                            CAD.RotoTranslatePartXY(PartItems[pos.source - SheetItems.Count].Features,
+                            RotoTranslatePartXY(PartItems[pos.source - SheetItems.Count].Features,
                             pos.x, pos.y, Math.PI / 180 * pos.rotation));
-                        PartItems[pos.source - SheetItems.Count].UsedQty++;
+                        if (PartItems[pos.source - SheetItems.Count].SheetId == -1)
+                        {
+                            PartItems[pos.source - SheetItems.Count].UsedQty++;
+                        }
                     }
                 }
             }
         }
 
-        public void Export(object obj, string file)
+        public void Export(object obj, string file, ACadVersion version = ACadVersion.AC1015)
         {
             if (obj == null) return;
 
-            if (obj.GetType() == typeof(NestItem))
-            {
-                NestItem nest = (NestItem)obj;
-
-                if (NestItems.Any())
-                {
-                    CadDocument doc = new ACadSharp.CadDocument(ACadVersion.AC1015);
-
-                    foreach (CAD.Feature f in SheetItems[nest.SheetSource].Features)
-                    {
-                        Layer lay = doc.Layers.ToList().Find(l => l.Name == f.Tag);
-                        if (lay == null)
-                        {
-                            doc.Layers.Add(new Layer(f.Tag));
-                            lay = doc.Layers.Last();
-                        }
-
-                        doc.ModelSpace.Entities.Add(GetPoly(f, lay));
-                    }
-
-                    foreach (List<CAD.Feature> part in nest.NestData.Concat(SheetItems[nest.SheetSource].Associated))
-                    {
-                        foreach (CAD.Feature f in part)
-                        {
-                            Layer lay = doc.Layers.ToList().Find(l => l.Name == f.Tag);
-                            if (lay == null)
-                            {
-                                doc.Layers.Add(new Layer(f.Tag));
-                                lay = doc.Layers.Last();
-                            }
-
-                            doc.ModelSpace.Entities.Add(GetPoly(f, lay));
-                        }
-                    }
-
-                    DxfWriter.Write(file, doc, false);
-                }
-            }
-            else if (obj.GetType() == typeof(PartItem))
+            double offsetX = 0.0;
+            double offsetY = 0.0; 
+            
+            if (obj.GetType() == typeof(PartItem))
             {
                 PartItem part = (PartItem)obj;
 
-                CadDocument doc = new ACadSharp.CadDocument(ACadVersion.AC1015);
+                CadDocument doc = new ACadSharp.CadDocument(version);
+                doc.AppIds.Add(new AppId("BEVEL"));
 
-                foreach (CAD.Feature f in part.Features)
+                foreach (Feature f in part.Features)
                 {
                     Layer lay = doc.Layers.ToList().Find(l => l.Name == f.Tag);
                     if (lay == null)
@@ -749,20 +958,40 @@ namespace DXFnest
                         lay = doc.Layers.Last();
                     }
 
-                    doc.ModelSpace.Entities.Add(GetPoly(f, lay));
+                    doc.ModelSpace.Entities.AddRange(GetPolys(f, lay, offsetX, offsetY));
                 }
 
                 DxfWriter.Write(file, doc, false);
             }
-            else if (obj.GetType() == typeof(SheetItem))
+            else if (obj.GetType() == typeof(NestItem))
             {
-                SheetItem sheet = (SheetItem)obj;
+                NestItem nest = (NestItem)obj;
 
-                if (sheet.Features.Any() || sheet.Associated.Any())
+                if (Opts.Origin == Options.OriginPosition.XY_MID)
                 {
-                    CadDocument doc = new ACadSharp.CadDocument(ACadVersion.AC1015);
+                    offsetX = -SheetItems[nest.SheetSource].LX / 2.0;
+                    offsetY = -SheetItems[nest.SheetSource].LY / 2.0;
+                }
 
-                    foreach (CAD.Feature f in sheet.Features)
+                if (Opts.Origin == Options.OriginPosition.XY_MAX ||
+                    Opts.Origin == Options.OriginPosition.X_MAX_Y_MIN)
+                {
+                    offsetX = -SheetItems[nest.SheetSource].LX;
+                }
+
+                if (Opts.Origin == Options.OriginPosition.XY_MAX ||
+                    Opts.Origin == Options.OriginPosition.X_MIN_Y_MAX)
+                {
+                    offsetY = -SheetItems[nest.SheetSource].LY;
+                }
+
+                if (NestItems.Any())
+                {
+                    CadDocument doc = new ACadSharp.CadDocument(version);
+                    AppId appId = new AppId("BEVEL");
+                    doc.AppIds.Add(appId);
+
+                    foreach (Feature f in SheetItems[nest.SheetSource].Features)
                     {
                         Layer lay = doc.Layers.ToList().Find(l => l.Name == f.Tag);
                         if (lay == null)
@@ -771,12 +1000,12 @@ namespace DXFnest
                             lay = doc.Layers.Last();
                         }
 
-                        doc.ModelSpace.Entities.Add(GetPoly(f, lay));
+                        doc.ModelSpace.Entities.AddRange(GetPolys(f, lay, offsetX, offsetY));
                     }
 
-                    foreach (List<CAD.Feature> part in sheet.Associated)
+                    foreach (SheetAssociation sa in SheetItems[nest.SheetSource].Associated)
                     {
-                        foreach (CAD.Feature f in part)
+                        foreach (Feature f in RotoTranslatePartXY(PartItems[sa.partId].Features, sa.T.X, sa.T.Y, sa.T.Rot))
                         {
                             Layer lay = doc.Layers.ToList().Find(l => l.Name == f.Tag);
                             if (lay == null)
@@ -785,7 +1014,80 @@ namespace DXFnest
                                 lay = doc.Layers.Last();
                             }
 
-                            doc.ModelSpace.Entities.Add(GetPoly(f, lay));
+                            doc.ModelSpace.Entities.AddRange(GetPolys(f, lay, offsetX, offsetY));
+                        }
+                    }
+
+                    foreach (List<Feature> part in nest.NestData)
+                    {
+                        foreach (Feature f in part)
+                        {
+                            Layer lay = doc.Layers.ToList().Find(l => l.Name == f.Tag);
+                            if (lay == null)
+                            {
+                                doc.Layers.Add(new Layer(f.Tag));
+                                lay = doc.Layers.Last();
+                            }
+
+                            doc.ModelSpace.Entities.AddRange(GetPolys(f, lay, offsetX, offsetY));
+                        }
+                    }
+
+                    DxfWriter.Write(file, doc, false);
+                }
+            }
+            else if (obj.GetType() == typeof(SheetItem))
+            {
+                SheetItem sheet = (SheetItem)obj;
+
+                if (Opts.Origin == Options.OriginPosition.XY_MID)
+                {
+                    offsetX = -sheet.LX / 2.0;
+                    offsetY = -sheet.LY / 2.0;
+                }
+
+                if (Opts.Origin == Options.OriginPosition.XY_MAX ||
+                    Opts.Origin == Options.OriginPosition.X_MAX_Y_MIN)
+                {
+                    offsetX = -sheet.LX;
+                }
+
+                if (Opts.Origin == Options.OriginPosition.XY_MAX ||
+                    Opts.Origin == Options.OriginPosition.X_MIN_Y_MAX)
+                {
+                    offsetY = -sheet.LY;
+                }
+
+                if (sheet.Features.Any() || sheet.Associated.Any())
+                {
+                    CadDocument doc = new ACadSharp.CadDocument(version);
+                    AppId appId = new AppId("BEVEL");
+                    doc.AppIds.Add(appId);
+
+                    foreach (Feature f in sheet.Features)
+                    {
+                        Layer lay = doc.Layers.ToList().Find(l => l.Name == f.Tag);
+                        if (lay == null)
+                        {
+                            doc.Layers.Add(new Layer(f.Tag));
+                            lay = doc.Layers.Last();
+                        }
+
+                        doc.ModelSpace.Entities.AddRange(GetPolys(f, lay, offsetX, offsetY));
+                    }
+
+                    foreach (SheetAssociation sa in sheet.Associated)
+                    {
+                        foreach (Feature f in RotoTranslatePartXY(PartItems[sa.partId].Features, sa.T.X, sa.T.Y, sa.T.Rot))
+                        {
+                            Layer lay = doc.Layers.ToList().Find(l => l.Name == f.Tag);
+                            if (lay == null)
+                            {
+                                doc.Layers.Add(new Layer(f.Tag));
+                                lay = doc.Layers.Last();
+                            }
+
+                            doc.ModelSpace.Entities.AddRange(GetPolys(f, lay, offsetX, offsetY));
                         }
                     }
 
@@ -793,16 +1095,46 @@ namespace DXFnest
                 }
             }
 
-            LwPolyline GetPoly(CAD.Feature feature, Layer layer)
+            List<LwPolyline> GetPolys(Feature feature, Layer layer, double dx = 0, double dy = 0)
             {
+                List<LwPolyline> polys = new List<LwPolyline>();
                 LwPolyline poly = new LwPolyline() { Layer = layer, };
+                List<Edge> edges = feature.Edges;
 
-                List<CAD.Edge> edges = feature.Mesh.Edges;
+                if (!edges.Any()) new List<LwPolyline>();
+
+                BevelDefinition curBevel = edges.First().Bevel;
+                ExtendedData data = new ExtendedData();
+                data.Records.Add(new ExtendedDataString(curBevel.Type.ToString()));
+                data.Records.Add(new ExtendedDataReal(curBevel.A));
+                data.Records.Add(new ExtendedDataReal(curBevel.Hr));
+                data.Records.Add(new ExtendedDataReal(curBevel.B));
+                data.Records.Add(new ExtendedDataReal(curBevel.r));
+                poly.ExtendedData.Add(new AppId("BEVEL"), data);
+
                 for (int i = 0; i < edges.Count; i++)
                 {
                     if (i == 0)
                     {
-                        poly.Vertices.Add(new LwPolyline.Vertex() { Location = new XY(edges[i].V0.X, edges[i].V0.Y) });
+                        poly.Vertices.Add(new LwPolyline.Vertex() { Location = new XY(edges[i].V0.X + dx, edges[i].V0.Y + dy) });
+                    }
+                    else
+                    {
+                        if (!edges[i].Bevel.Equals(curBevel))
+                        {
+                            polys.Add(poly);
+                            poly = new LwPolyline() { Layer = layer, };
+                            poly.Vertices.Add(new LwPolyline.Vertex() { Location = new XY(edges[i].V0.X + dx, edges[i].V0.Y + dy) });
+
+                            data = new ExtendedData();
+                            data.Records.Add(new ExtendedDataString(edges[i].Bevel.Type.ToString()));
+                            data.Records.Add(new ExtendedDataReal(edges[i].Bevel.A));
+                            data.Records.Add(new ExtendedDataReal(edges[i].Bevel.Hr));
+                            data.Records.Add(new ExtendedDataReal(edges[i].Bevel.B));
+                            data.Records.Add(new ExtendedDataReal(edges[i].Bevel.r));
+                            poly.ExtendedData.Add(new AppId("BEVEL"), data);
+                        }
+                        curBevel = edges[i].Bevel;
                     }
 
                     if (Math.Abs(edges[i].R) > Opts.Tol0)
@@ -839,7 +1171,7 @@ namespace DXFnest
 
                         poly.Vertices.Add(new LwPolyline.Vertex()
                         {
-                            Location = new XY(edges[i + edges[i].NS - 1].V1.X, edges[i + edges[i].NS - 1].V1.Y)
+                            Location = new XY(edges[i + edges[i].NS - 1].V1.X + dx, edges[i + edges[i].NS - 1].V1.Y + dy)
                         });
 
                         i += edges[i].NS - 1;
@@ -848,12 +1180,14 @@ namespace DXFnest
                     {
                         poly.Vertices.Add(new LwPolyline.Vertex()
                         {
-                            Location = new XY(edges[i].V1.X, edges[i].V1.Y)
+                            Location = new XY(edges[i].V1.X + dx, edges[i].V1.Y + dy)
                         });
                     }
                 }
 
-                return poly;
+                polys.Add(poly);
+
+                return polys;
             }
         }
     }
@@ -863,13 +1197,9 @@ namespace DXFnest
         public enum OriginPosition
         {
             XY_MIN,
-            X_MIN_Y_MID,
             X_MIN_Y_MAX,
-            X_MID_Y_MIN,
             XY_MID,
-            X_MID_Y_MAX,
             X_MAX_Y_MIN,
-            X_MAX_Y_MID,
             XY_MAX,
         }
 
@@ -884,90 +1214,107 @@ namespace DXFnest
         public const double angleStep = Math.PI / 32.0;
         public const double maxStepL = 50.0;
 
+        public const double MutationRate = 15;
+        public const int PopulationSize = 20;
+
         //[ReadOnly(true)]
-        [Category("MATERIAL")]
+        [Category("\t\t\t\t\t\t\tSHEET")]
         [DisplayName("ORIGIN")]
         public OriginPosition Origin { get; set; } = OriginPosition.XY_MIN;
 
-        [Category("MATERIAL")]
+        [Category("\t\t\t\t\t\t\tSHEET")]
         [DisplayName("MARGINS")]
-        //[TypeConverter(typeof(PositiveDoubleTypeConverter))]
         public double Margins { get; set; } = 5;
 
-        [Category("MATERIAL")]
+        [Category("\t\t\t\t\t\t\tSHEET")]
         [DisplayName("PART SPACING")]
-        //[TypeConverter(typeof(PositiveDoubleTypeConverter))]
-        public double Spacing { get; set; } = 7.5;
+        public double Spacing { get; set; } = 15.0;
 
-        [Category("MATERIAL")]
+        [Category("\t\t\t\t\t\t\tSHEET")]
         [DisplayName("DEFAULT SHEET WIDTH")]
-        //[TypeConverter(typeof(PositiveDoubleTypeConverter))]
         public double DefaultWidth { get; set; } = 3000.0;
 
-        [Category("MATERIAL")]
+        [Category("\t\t\t\t\t\t\tSHEET")]
         [DisplayName("DEFAULT SHEET HEIGHT")]
-        //[TypeConverter(typeof(PositiveDoubleTypeConverter))]
         public double DefaultHeight { get; set; } = 1500.0;
 
-        [Category("MATERIAL")]
+        [Category("\t\t\t\t\t\t\tSHEET")]
         [DisplayName("DEFAULT SHEET QUANTITY")]
-        //[TypeConverter(typeof(PositiveIntegerTypeConverter))]
         public int DefaultQty { get; set; } = 1;
 
-        [Category("NESTING")]
-        [DisplayName("PLACEMENT TYPE")]
-        public PlacementTypeEnum PlacementType { get; set; } = PlacementTypeEnum.BOX;
-
-        [Category("NESTING")]
+        [Category("\t\t\t\t\t\tNESTING")]
         [DisplayName("ROTATIONS")]
         public Rotations PartRotations { get; set; } = Rotations.ANY;
 
-        [Category("NESTING")]
+        [Category("\t\t\t\t\t\tNESTING")]
         [DisplayName("MIN INTERNAL AREAS")]
-        //[TypeConverter(typeof(PositiveDoubleTypeConverter))]
         public double MinIntArea { get; set; } = 5000.0;
 
-        [Category("NESTING")]
+        [Category("\t\t\t\t\t\tNESTING")]
         [DisplayName("PAVE LIMIT (%)")]
-        //[TypeConverter(typeof(PositiveDoubleTypeConverter))]
         public double PaveLimit { get; set; } = 90;
 
-        [Category("NESTING")]
-        [DisplayName("MUTATION RATE (%)")]
-        //[TypeConverter(typeof(PositiveIntegerTypeConverter))]
-        public double MutationRate { get; set; } = 15;
+        //[Browsable(false)]
+        //[Category("\t\t\t\t\t\tNESTING")]
+        //[DisplayName("MUTATION RATE (%)")]
+        //public double MutationRate { get; set; } = 15;
 
-        [Category("NESTING")]
-        [DisplayName("POPULATION SIZE")]
-        //[TypeConverter(typeof(PositiveIntegerTypeConverter))]
-        public int PopulationSize { get; set; } = 20;
+        //[Browsable(false)]
+        //[Category("\t\t\t\t\t\tNESTING")]
+        //[DisplayName("POPULATION SIZE")]
+        //public int PopulationSize { get; set; } = 20;
 
-        [Category("DXF IMPORT")]
+        [Category("\tDXF IMPORT")]
         [DisplayName("MERGE DISTANCE")]
-        //[TypeConverter(typeof(PositiveDoubleTypeConverter))]
         public double Tol0 { get; set; } = 1E-6;
 
-        [Category("DXF IMPORT")]
+        [Category("\tDXF IMPORT")]
         [DisplayName("LINK DISTANCE")]
-        //[TypeConverter(typeof(PositiveDoubleTypeConverter))]
         public double LinkDist { get; set; } = 1E-1;
 
-        [Category("DXF IMPORT")]
+        [Category("\tDXF IMPORT")]
+        [DisplayName("SET NEW ORIGIN")]
+        public bool NewPartOrigin { get; set; } = true;
+
+        //[Browsable(false)]
+        [Category("\tDXF IMPORT")]
+        [DisplayName("MULTIPLICITY MERGE")]
+        public bool MultiplicityMerge { get; set; } = true;
+
+        //[Browsable(false)]
+        [Category("\tDXF IMPORT")]
+        [DisplayName("MULTIPLICITY MERGE TOLERANCE")]
+        public double MultiplicityTol { get; set; } = 1.0;
+
+        [Category("\tDXF IMPORT")]
         [DisplayName("MERGE LAYERS")]
-        //[Editor(typeof(CheckEditor), typeof(UITypeEditor))]
         public bool MergeLayers { get; set; } = true;
 
-        [Category("DXF IMPORT")]
+        [Browsable(false)]
+        [Category("\tDXF IMPORT")]
         [DisplayName("NEST ARC SEGMENTS MAX LENGTH")]
-        //[TypeConverter(typeof(PositiveDoubleTypeConverter))]
         public double NestArcSegmentsMaxLength { get; set; } = 250.0;
+
+        [Browsable(false)]
+        [Category("LAYERS")]
+        [DisplayName("TOOL NB FROM LAYER NAME")]
+        public bool ToolNbFromLayerName { get; set; } = true;
+
+        [Category("LAYERS")]
+        [DisplayName("DEFAULT CUTTING LAYER")]
+        public int DefaultCutToolNb { get; set; } = 0;
+
+        [Category("LAYERS")]
+        [DisplayName("DEFAULT MARKING LAYER")]
+        public int DefaultMrkToolNb { get; set; } = 105;
     }
 
     public class PartItem
     {
-        public string SourceFileName;
+        //public string SourceFileName;
+        public int SheetId = -1;
 
-        public List<CAD.Feature> Features = new List<CAD.Feature>();
+        public List<Feature> Features = new List<Feature>();
 
         [ReadOnly(true)]
         [DisplayName("PART")]
@@ -988,9 +1335,10 @@ namespace DXFnest
         //[DisplayName("SHEET")]
         //public string Name { get; set; }
 
-        public string SourceFileName;
-        public List<CAD.Feature> Features = new List<CAD.Feature>();
-        public List<List<CAD.Feature>> Associated = new List<List<CAD.Feature>>();
+        //public string SourceFileName;
+        public List<Feature> Features = new List<Feature>();
+        //public List<List<Feature>> Associated = new List<List<Feature>>();
+        public List<SheetAssociation> Associated = new List<SheetAssociation>();
 
         [DisplayName("LENGTH X")]
         //[TypeConverter(typeof(PositiveDoubleTypeConverter))]
@@ -1009,12 +1357,18 @@ namespace DXFnest
         public int IniQty { get; set; }
     }
 
+    public class SheetAssociation
+    {
+        public int partId = -1;
+        public Transform2d T = new Transform2d(0, 0, 0);
+    }
+
     public class NestItem
     {
         public int SheetSource = -1;
         //public bool FromSource = false;
         //public string SourceFileName;
-        public List<List<CAD.Feature>> NestData = new List<List<CAD.Feature>>();
+        public List<List<Feature>> NestData = new List<List<Feature>>();
 
         [ReadOnly(true)]
         [DisplayName("NEST")]
@@ -1031,8 +1385,5 @@ namespace DXFnest
 
         [DisplayName("TYPE")]
         public LayerType Type { get; set; }
-
-        [DisplayName("TOOL NUMBER")]
-        public int ToolNb { get; set; }
     }
 }

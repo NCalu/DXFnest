@@ -1,0 +1,119 @@
+﻿using ACadSharp;
+using ACadSharp.Entities;
+using ACadSharp.Tables;
+using CSMath;
+using System;
+using System.Collections.Generic;
+using System.ComponentModel;
+
+public class Shape2D
+{
+    public class ShapeParameters
+    {
+        [Category("OUTER SHAPE")]
+        public double LENGTH { get; set; }
+        [Category("OUTER SHAPE")]
+        public double WIDTH { get; set; }
+        [Category("MARKING")]
+        public double MARKING_OFFSET { get; set; }
+
+        public ShapeParameters()
+        {
+            LENGTH = 500.0;
+            MARKING_OFFSET = 25.0;
+        }
+    }
+
+    public CadDocument Run(ShapeParameters parameters)
+    {
+        CadDocument doc = new CadDocument();
+
+        Layer cutLayer = new Layer("_CUT");
+        LwPolyline cutRect = new LwPolyline
+        {
+            IsClosed = true,
+            Vertices = new List<LwPolyline.Vertex>
+                {
+                   new LwPolyline.Vertex() { Location = new XY(-parameters.LENGTH / 2.0, -parameters.LENGTH / 2.0) },
+                   new LwPolyline.Vertex() { Location = new XY(parameters.LENGTH / 2.0, -parameters.LENGTH / 2.0) },
+                   new LwPolyline.Vertex() { Location = new XY(parameters.LENGTH / 2.0, parameters.LENGTH / 2.0) },
+                   new LwPolyline.Vertex() { Location = new XY(-parameters.LENGTH / 2.0, parameters.LENGTH / 2.0) },
+                }
+        };
+        cutRect.Layer = cutLayer;
+        doc.ModelSpace.Entities.Add(cutRect);
+
+        Layer mrkLayer = new Layer("_MRK");
+        LwPolyline mrkRect = new LwPolyline
+        {
+            IsClosed = true,
+            Vertices = new List<LwPolyline.Vertex>
+                {
+                   new LwPolyline.Vertex() 
+                   { 
+                       Location = new XY(
+                           -parameters.LENGTH / 2.0 + parameters.MARKING_OFFSET, 
+                           -parameters.LENGTH / 2.0 + parameters.MARKING_OFFSET) 
+                   },
+                   new LwPolyline.Vertex() 
+                   { 
+                       Location = new XY(
+                           parameters.LENGTH / 2.0 - parameters.MARKING_OFFSET, 
+                           -parameters.LENGTH / 2.0 + parameters.MARKING_OFFSET) 
+                   },
+                   new LwPolyline.Vertex() 
+                   { 
+                       Location = new XY(
+                           parameters.LENGTH / 2.0 - parameters.MARKING_OFFSET, 
+                           parameters.LENGTH / 2.0 - parameters.MARKING_OFFSET) 
+                   },
+                   new LwPolyline.Vertex() 
+                   { 
+                       Location = new XY(
+                           -parameters.LENGTH / 2.0 + parameters.MARKING_OFFSET, 
+                           parameters.LENGTH / 2.0 - parameters.MARKING_OFFSET) 
+                   },
+                }
+        };
+        mrkRect.Layer = mrkLayer;
+        doc.ModelSpace.Entities.Add(mrkRect);
+
+        Circle mrkCircle = new Circle()
+        {
+            Center = new XYZ(0, 0, 0),
+            Radius = parameters.LENGTH / 2.0 - parameters.MARKING_OFFSET,
+        };
+        mrkCircle.Layer = mrkLayer;
+        doc.ModelSpace.Entities.Add(mrkCircle);
+
+        Line mrkDiag1 = new Line()
+        {
+            StartPoint = new XYZ(
+                           -parameters.LENGTH / 2.0 + parameters.MARKING_OFFSET,
+                           -parameters.LENGTH / 2.0 + parameters.MARKING_OFFSET,
+                           0.0),
+            EndPoint = new XYZ(
+                           parameters.LENGTH / 2.0 - parameters.MARKING_OFFSET,
+                           parameters.LENGTH / 2.0 - parameters.MARKING_OFFSET,
+                           0.0),
+        };
+        mrkDiag1.Layer = mrkLayer;
+        doc.ModelSpace.Entities.Add(mrkDiag1);
+
+        Line mrkDiag2 = new Line()
+        {
+            StartPoint = new XYZ(
+                           -parameters.LENGTH / 2.0 + parameters.MARKING_OFFSET,
+                           parameters.LENGTH / 2.0 - parameters.MARKING_OFFSET,
+                           0.0),
+            EndPoint = new XYZ(
+                           parameters.LENGTH / 2.0 - parameters.MARKING_OFFSET,
+                           -parameters.LENGTH / 2.0 + parameters.MARKING_OFFSET,
+                           0.0),
+        };
+        mrkDiag2.Layer = mrkLayer;
+        doc.ModelSpace.Entities.Add(mrkDiag2);
+
+        return doc;
+    }
+}

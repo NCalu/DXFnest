@@ -1,0 +1,103 @@
+﻿using ACadSharp;
+using ACadSharp.Entities;
+using CSMath;
+using System;
+using System.Collections.Generic;
+using System.ComponentModel;
+using System.Drawing.Text;
+using System.Drawing;
+using System.IO;
+using System.Reflection;
+using System.Runtime.InteropServices;
+using System.Text;
+using System.Drawing.Drawing2D;
+
+public class Shape2D
+{
+    public class ShapeParameters
+    {
+        [Category("SHAPE")]
+        public string SEED { get; set; }
+
+        [Category("SHAPE")]
+        public double HEIGHT { get; set; }
+
+        [Category("NESTING")]
+        public double SHRINK_RATIO { get; set; }
+
+        public ShapeParameters()
+        {
+            SEED = "++++++◨◨◨◟◟◟◟◟◟◟◟◟◟◟◟◟◟:::::::::::::::::";
+            HEIGHT = 1500.0;
+            SHRINK_RATIO = 0.75;
+        }
+    }
+
+    public CadDocument Run(ShapeParameters parameters)
+    {
+        CadDocument doc = new CadDocument();
+
+        using (GraphicsPath path = new GraphicsPath())
+        {
+            //FontFamily family = new FontFamily("WEBDINGS");
+            FontFamily family = new FontFamily("Segoe UI Symbol");
+
+            float height0 = (float)parameters.HEIGHT;
+            float height = height0;
+            int j = 0;
+            int k = 0;
+            for (int i = 0; i < parameters.SEED.Length; i++)
+            {
+                if (i > 0 && parameters.SEED[i] != parameters.SEED[i - 1])
+                {
+                    height = height * (float)parameters.SHRINK_RATIO;
+                    j = 0;
+                    k++;
+                }
+                path.AddString(parameters.SEED[i].ToString(), family, (int)FontStyle.Regular, height, 
+                    new PointF(j * height, k * height0), StringFormat.GenericDefault);
+                j++;
+            }
+
+            path.Flatten(); 
+
+            PointF[] pts = path.PathPoints;
+            byte[] types = path.PathTypes;
+
+            LwPolyline currentPoly = null;
+
+            for (int i = 0; i < pts.Length; i++)
+            {
+                bool isStart = (types[i] & (byte)PathPointType.PathTypeMask) == (byte)PathPointType.Start;
+                bool isClosed = (types[i] & (byte)PathPointType.CloseSubpath) != 0;
+
+                if (isStart)
+                {
+                    if (currentPoly != null)
+                        doc.ModelSpace.Entities.Add(currentPoly);
+
+                    currentPoly = new LwPolyline();
+                }
+
+                currentPoly.Vertices.Add(
+                    new LwPolyline.Vertex()
+                    {
+                        Location = new XY(pts[i].X, -pts[i].Y)
+                    });
+
+                if (isClosed && currentPoly != null)
+                {
+                    currentPoly.IsClosed = true;
+                    doc.ModelSpace.Entities.Add(currentPoly);
+                    currentPoly = null;
+                }
+            }
+
+            if (currentPoly != null)
+                doc.ModelSpace.Entities.Add(currentPoly);
+        }
+
+
+        return doc;
+    }
+}

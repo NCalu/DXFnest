@@ -1,0 +1,43 @@
+﻿using ACadSharp;
+using ACadSharp.Entities;
+using CSMath;
+using System.ComponentModel;
+
+public class Shape2D
+{
+    public class ShapeParameters
+    {
+        [Category("OUTER SHAPE")]
+        public double OUTTER_DIAMETER { get; set; }
+
+        [Category("INNER SHAPE")]
+        public double INNER_DIAMETER { get; set; }
+
+        public ShapeParameters()
+        {
+            OUTTER_DIAMETER = 400.0;
+            INNER_DIAMETER = 250.0;
+        }
+    }
+
+    public CadDocument Run(ShapeParameters parameters)
+    {
+        CadDocument doc = new CadDocument();
+
+        Circle outCircle = new Circle()
+        {
+            Center = new XYZ(0, 0, 0),
+            Radius = parameters.OUTTER_DIAMETER / 2.0,
+        };
+        doc.ModelSpace.Entities.Add(outCircle);
+
+        Circle inCircle = new Circle()
+        {
+            Center = new XYZ(0, 0, 0),
+            Radius = parameters.INNER_DIAMETER / 2.0,
+        };
+        doc.ModelSpace.Entities.Add(inCircle);
+
+        return doc;
+    }
+}

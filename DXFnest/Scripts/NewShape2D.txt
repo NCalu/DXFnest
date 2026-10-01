@@ -1,0 +1,28 @@
+﻿using ACadSharp;
+using ACadSharp.Entities;
+using System;
+using System.Collections.Generic;
+using System.ComponentModel;
+
+public class Shape2D
+{
+    public class ShapeParameters
+    {
+        [Category("CATEGORY")]
+        public double DBL_PARAM { get; set; }
+
+        public ShapeParameters()
+        {
+            DBL_PARAM = 100.0;
+        }
+    }
+
+    public CadDocument Run(ShapeParameters parameters)
+    {
+        CadDocument doc = new CadDocument();
+
+        // doc.ModelSpace.Entities.Add(...);
+
+        return doc;
+    }
+}

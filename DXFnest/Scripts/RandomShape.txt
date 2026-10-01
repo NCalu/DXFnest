@@ -1,0 +1,118 @@
+﻿using ACadSharp;
+using ACadSharp.Entities;
+using CSMath;
+using System;
+using System.Collections.Generic;
+using System.ComponentModel;
+using System.Drawing;
+using System.Drawing.Drawing2D;
+
+public class Shape2D
+{
+    public class ShapeParameters
+    {
+        [Category("SHAPE")]
+        [TypeConverter(typeof(CharListConverter))]
+        public string SHAPE { get; set; }
+
+        [Category("SHAPE")]
+        public double HEIGHT { get; set; }
+
+        public ShapeParameters()
+        {
+            SHAPE = "▲";
+            HEIGHT = 500.0;
+        }
+    }
+
+    public CadDocument Run(ShapeParameters parameters)
+    {
+        CadDocument doc = new CadDocument();
+
+        // doc.ModelSpace.Entities.Add(...);
+
+        FontFamily family = new FontFamily("Segoe UI Symbol");
+
+        using (GraphicsPath path = new GraphicsPath())
+        {
+            path.AddString(parameters.SHAPE, family, (int)FontStyle.Regular, 100, new PointF(0f, 0f), StringFormat.GenericDefault);
+
+            path.Flatten();
+
+            PointF[] pts = path.PathPoints;
+            byte[] types = path.PathTypes;
+
+            LwPolyline currentPoly = null;
+
+            float minX = float.MaxValue;
+            float minY = float.MaxValue;
+
+            float maxY = float.MinValue;
+
+            for (int i = 0; i < pts.Length; i++)
+            {
+                if (pts[i].X < minX) minX = pts[i].X;
+                if (-pts[i].Y < minY) minY = -pts[i].Y;
+                if (-pts[i].Y > maxY) maxY = -pts[i].Y;
+            }
+
+            float scale = (float)parameters.HEIGHT / (maxY - minY);
+
+            for (int i = 0; i < pts.Length; i++)
+            {
+                bool isStart = (types[i] & (byte)PathPointType.PathTypeMask) == (byte)PathPointType.Start;
+                bool isClosed = (types[i] & (byte)PathPointType.CloseSubpath) != 0;
+
+                if (isStart)
+                {
+                    if (currentPoly != null)
+                        doc.ModelSpace.Entities.Add(currentPoly);
+
+                    currentPoly = new LwPolyline();
+                }
+
+                currentPoly.Vertices.Add(
+                    new LwPolyline.Vertex()
+                    {
+                        Location = new XY(scale * (pts[i].X - minX), scale * (-pts[i].Y - minY))
+                    });
+
+                if (isClosed && currentPoly != null)
+                {
+                    currentPoly.IsClosed = true;
+                    doc.ModelSpace.Entities.Add(currentPoly);
+                    currentPoly = null;
+                }
+            }
+
+            if (currentPoly != null)
+                doc.ModelSpace.Entities.Add(currentPoly);
+        }
+
+        return doc;
+    }
+
+    public class CharListConverter : StringConverter
+    {
+        private static readonly string[] _chars = 
+        {
+            "▤", "▦", "◐","➤", "★", "☆", "✚", "✖", "✦", "✧", "☒", "◘","⌖", "⊕", "↔"
+        };
+
+        public override bool GetStandardValuesSupported(ITypeDescriptorContext context)
+        {
+            return true;
+        }
+
+        public override bool GetStandardValuesExclusive(ITypeDescriptorContext context)
+        {
+            return true; // dropdown only, no typing
+        }
+
+        public override StandardValuesCollection GetStandardValues(
+            ITypeDescriptorContext context)
+        {
+            return new StandardValuesCollection(_chars);
+        }
+    }
+}

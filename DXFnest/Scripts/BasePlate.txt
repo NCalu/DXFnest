@@ -1,0 +1,95 @@
+﻿using ACadSharp;
+using ACadSharp.Entities;
+using CSMath;
+using System;
+using System.Collections.Generic;
+using System.ComponentModel;
+
+public class Shape2D
+{
+    public class ShapeParameters
+    {
+        [Category("OUTER SHAPE")]
+        public double LENGTH { get; set; }
+        [Category("OUTER SHAPE")]
+        public double WIDTH { get; set; }
+        [Category("OUTER SHAPE")]
+        public double CORNER_RADIUS { get; set; }
+
+        [Category("CORNER HOLES")]
+        public double DX { get; set; }
+        [Category("CORNER HOLES")]
+        public double DY { get; set; }
+        [Category("CORNER HOLES")]
+        public double DIAMETER { get; set; }
+
+        public ShapeParameters()
+        {
+            LENGTH = 400.0;
+            WIDTH = 400.0;
+            CORNER_RADIUS = 25.0;
+
+            DX = 300.0;
+            DY = 300.0;
+            DIAMETER = 50.0;
+        }
+    }
+
+    public CadDocument Run(ShapeParameters parameters)
+    {
+        CadDocument doc = new CadDocument();
+
+        if (parameters.CORNER_RADIUS > 0)
+        {
+            LwPolyline rect = new LwPolyline
+            {
+                IsClosed = true,
+                Vertices = new List<LwPolyline.Vertex>
+                {
+                    new LwPolyline.Vertex() { Location = new XY(-parameters.LENGTH / 2.0 + parameters.CORNER_RADIUS, -parameters.WIDTH / 2.0) },
+                    new LwPolyline.Vertex() { Location = new XY( parameters.LENGTH / 2.0 - parameters.CORNER_RADIUS, -parameters.WIDTH / 2.0), Bulge = Math.Tan(Math.PI / 8.0) },
+                    new LwPolyline.Vertex() { Location = new XY( parameters.LENGTH / 2.0, -parameters.WIDTH / 2.0 + parameters.CORNER_RADIUS) },
+                    new LwPolyline.Vertex() { Location = new XY( parameters.LENGTH / 2.0,  parameters.WIDTH / 2.0 - parameters.CORNER_RADIUS), Bulge = Math.Tan(Math.PI / 8.0) },
+                    new LwPolyline.Vertex() { Location = new XY( parameters.LENGTH / 2.0 - parameters.CORNER_RADIUS,  parameters.WIDTH / 2.0) },
+                    new LwPolyline.Vertex() { Location = new XY(-parameters.LENGTH / 2.0 + parameters.CORNER_RADIUS,  parameters.WIDTH / 2.0), Bulge = Math.Tan(Math.PI / 8.0) },
+                    new LwPolyline.Vertex() { Location = new XY(-parameters.LENGTH / 2.0,  parameters.WIDTH / 2.0 - parameters.CORNER_RADIUS) },
+                    new LwPolyline.Vertex() { Location = new XY(-parameters.LENGTH / 2.0, -parameters.WIDTH / 2.0 + parameters.CORNER_RADIUS), Bulge = Math.Tan(Math.PI / 8.0) },
+                }
+            };
+            doc.ModelSpace.Entities.Add(rect);
+        }
+        else
+        {
+            LwPolyline rect = new LwPolyline
+            {
+                IsClosed = true,
+                Vertices = new List<LwPolyline.Vertex>
+                {
+                   new LwPolyline.Vertex() { Location = new XY(-parameters.LENGTH / 2.0, -parameters.WIDTH / 2.0) },
+                   new LwPolyline.Vertex() { Location = new XY(parameters.LENGTH / 2.0, -parameters.WIDTH / 2.0) },
+                   new LwPolyline.Vertex() { Location = new XY(parameters.LENGTH / 2.0, parameters.WIDTH / 2.0) },
+                   new LwPolyline.Vertex() { Location = new XY(-parameters.LENGTH / 2.0, parameters.WIDTH / 2.0) },
+                }
+            };
+            doc.ModelSpace.Entities.Add(rect);
+        }
+
+        if (parameters.DIAMETER > 0)
+        {
+            for (int i = -1; i <= 1; i += 2)
+            {
+                for (int j = -1; j <= 1; j += 2)
+                {
+                    Circle circle = new Circle()
+                    {
+                        Center = new XYZ(i * parameters.DX / 2.0, j * parameters.DY / 2.0, 0),
+                        Radius = parameters.DIAMETER / 2.0,
+                    };
+                    doc.ModelSpace.Entities.Add(circle);
+                }
+            }
+        }
+
+        return doc;
+    }
+}

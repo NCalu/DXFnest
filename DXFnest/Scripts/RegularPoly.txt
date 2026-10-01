@@ -1,0 +1,48 @@
+﻿using ACadSharp;
+using ACadSharp.Entities;
+using CSMath;
+using System;
+using System.Collections.Generic;
+using System.ComponentModel;
+
+public class Shape2D
+{
+    public class ShapeParameters
+    {
+        [Category("OUTER SHAPE")]
+        public int N_FACES { get; set; }
+        [Category("OUTER SHAPE")]
+        public double CIRCUMSCRIBED_DIAMETER { get; set; }
+
+        public ShapeParameters()
+        {
+            N_FACES = 3;
+            CIRCUMSCRIBED_DIAMETER = 250.0;
+        }
+    }
+
+    public CadDocument Run(ShapeParameters parameters)
+    {
+        CadDocument doc = new CadDocument();
+        int n = Math.Max(3, parameters.N_FACES);
+
+        double radius = parameters.CIRCUMSCRIBED_DIAMETER / 2.0;
+
+        LwPolyline poly = new LwPolyline();
+        poly.IsClosed = true;
+
+        for (int i = 0; i < n; i++)
+        {
+            double angle = Math.PI / 2.0 + 2.0 * Math.PI * i / n;
+
+            double x = radius * Math.Cos(angle);
+            double y = radius * Math.Sin(angle);
+
+            poly.Vertices.Add(new LwPolyline.Vertex() { Location = new XY(x, y) });
+        }
+
+        doc.ModelSpace.Entities.Add(poly);
+
+        return doc;
+    }
+}

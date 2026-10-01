@@ -9,7 +9,7 @@ namespace DeepNestLib
         public Nest Nest { get; private set; }
         public int Iterations { get; private set; } = 0;
 
-        private List<NestItem> Items = new List<NestItem>();
+        private List<Item> Items = new List<Item>();
 
         public NestingContext()
         {
@@ -19,14 +19,23 @@ namespace DeepNestLib
 
         public void AddSheet(NFP sheet, int qty)
         {
-            NestItem sheetItem = new NestItem();
-            sheetItem.Polygon = Nest.polygonOffsetDeepNest(sheet, -Nest.Config.sheetSpacing + 0.5 * Nest.Config.spacing).FirstOrDefault();
+            Item sheetItem = new Item();
+            sheetItem.Polygon = Nest.PolygonOffsetDeepNest(sheet, -Nest.Config.sheetSpacing + 0.5 * Nest.Config.spacing).FirstOrDefault();
             List<NFP> children = new List<NFP>();
             if (sheet.children != null)
             {
                 foreach (NFP child in sheet.children)
                 {
-                    children.Add(Nest.polygonOffsetDeepNest(child, Nest.Config.sheetSpacing - 0.5 * Nest.Config.spacing).FirstOrDefault());
+                    children.Add(Nest.PolygonOffsetDeepNest(child, 0.5 * Nest.Config.spacing).FirstOrDefault());
+                    if (child.children != null)
+                    {
+                        List<NFP> subChildren = new List<NFP>();
+                        foreach (NFP subChild in child.children)
+                        {
+                            subChildren.Add(Nest.PolygonOffsetDeepNest(subChild, -0.5 * Nest.Config.spacing).FirstOrDefault());
+                        }
+                        children.Last().children = subChildren;
+                    }
                 }
             }
             sheetItem.Polygon.children = children;
@@ -37,14 +46,14 @@ namespace DeepNestLib
 
         public void AddPart(NFP part, int qty, EnabledRotations rots, double minHrot)
         {
-            NestItem partItem = new NestItem();
-            partItem.Polygon = Nest.polygonOffsetDeepNest(part, 0.5 * Nest.Config.spacing).FirstOrDefault();
+            Item partItem = new Item();
+            partItem.Polygon = Nest.PolygonOffsetDeepNest(part, 0.5 * Nest.Config.spacing).FirstOrDefault();
             List<NFP> children = new List<NFP>();
             if (part.children != null)
             {
                 foreach (NFP child in part.children)
                 {
-                    children.Add(Nest.polygonOffsetDeepNest(child, -0.5 * Nest.Config.spacing).FirstOrDefault());
+                    children.Add(Nest.PolygonOffsetDeepNest(child, -0.5 * Nest.Config.spacing).FirstOrDefault());
                 }
             }
             partItem.Polygon.children = children;
@@ -60,7 +69,7 @@ namespace DeepNestLib
 
         public void NestIterate(CancellationToken token)
         {
-            Nest.launchWorkers(Items.ToArray(), token);
+            Nest.LaunchWorkers(Items.ToArray(), token);
             Iterations++;
         }
     }

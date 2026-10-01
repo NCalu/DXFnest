@@ -12,7 +12,7 @@ namespace DeepNestLib
         public SheetPlacement nests = null;
         public static NestConfig Config = new NestConfig();
         public Nest() { }
-        public static NFP[] polygonOffsetDeepNest(NFP polygon, double offset)
+        public static NFP[] PolygonOffsetDeepNest(NFP polygon, double offset)
         {
             if (offset == 0) return new[] { polygon };
             List<IntPoint> p = ToClipper(polygon).ToList();
@@ -25,7 +25,7 @@ namespace DeepNestLib
             List<NFP> result = new List<NFP>();
             for (var i = 0; i < newpaths.Count; i++)
             {
-                result.Add(clipperToNFP(newpaths[i]));
+                result.Add(ClipperToNFP(newpaths[i]));
             }
 
             return result.ToArray();
@@ -35,7 +35,7 @@ namespace DeepNestLib
             var d = Clipper.ScaleUpPaths(polygon, NestConfig.clipperScale);
             return d.ToArray();
         }
-        public static NFP clipperToNFP(IList<IntPoint> polygon)
+        public static NFP ClipperToNFP(IList<IntPoint> polygon)
         {
             List<Point> ret = new List<Point>();
 
@@ -82,7 +82,7 @@ namespace DeepNestLib
                 this.nests = payload;
             }
         }
-        public void launchWorkers(NestItem[] parts, CancellationToken token)
+        public void LaunchWorkers(Item[] parts, CancellationToken token)
         {
             background.ResponseAction = ResponseProcessor;
 
@@ -198,7 +198,7 @@ namespace DeepNestLib
     }
     public enum PlacementTypeEnum
     {
-        BOX, GRAVITY, SQUEEZE
+        box, gravity, squeeze
     }
     public class PopulationItem
     {
@@ -241,7 +241,7 @@ namespace DeepNestLib
         internal int index;
     }
     public enum EnabledRotations { NONE, BY_90, BY_180, ANY, PAVE_0_90 }
-    public class NestItem
+    public class Item
     {
         public NFP Polygon;
         public int Quanity;
